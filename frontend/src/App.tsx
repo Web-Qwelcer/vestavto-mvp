@@ -53,20 +53,39 @@ declare global {
 }
 
 function App() {
-  const { login } = useAuthStore()
+  const { login, fetchUser, token, authError } = useAuthStore()
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp
+
     if (tg) {
       tg.ready()
       tg.expand()
-      
-      // Авторизація через Telegram initData
+
       if (tg.initData) {
+        // Fresh Telegram session — authenticate
         login(tg.initData)
+      } else if (token) {
+        // App reloaded without new initData — restore user from saved token
+        fetchUser()
       }
+    } else if (token) {
+      // Outside Telegram (browser/dev) — restore user state from saved token
+      fetchUser()
     }
-  }, [login])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (authError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="text-4xl mb-4">⚠️</div>
+          <p className="text-gray-700 font-medium mb-2">Помилка авторизації</p>
+          <p className="text-sm text-gray-500">{authError}</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <BrowserRouter>
