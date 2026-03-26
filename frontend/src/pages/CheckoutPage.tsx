@@ -43,6 +43,8 @@ export default function CheckoutPage() {
     enabled: !!form.np_city_ref
   })
 
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
   // Create order
   const createOrder = useMutation({
     mutationFn: async () => {
@@ -59,19 +61,25 @@ export default function CheckoutPage() {
       return res.data
     },
     onSuccess: async (order) => {
-      // Create payment
-      const payRes = await api.post('/payments/create', {
-        order_id: order.id,
-        payment_type: form.payment_type
-      })
-      clearCart()
-      // Redirect to Monobank payment page
-      window.location.href = payRes.data.page_url
+      try {
+        const payRes = await api.post('/payments/create', {
+          order_id: order.id,
+          payment_type: form.payment_type
+        })
+        clearCart()
+        window.location.href = payRes.data.page_url
+      } catch (err: any) {
+        setErrorMsg(err?.response?.data?.detail || 'Помилка створення платежу')
+      }
+    },
+    onError: (err: any) => {
+      setErrorMsg(err?.response?.data?.detail || 'Помилка створення замовлення')
     }
   })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setErrorMsg(null)
     createOrder.mutate()
   }
 
@@ -174,7 +182,7 @@ export default function CheckoutPage() {
         {/* Payment type */}
         <div className="card">
           <h2 className="font-medium mb-3">Оплата</h2>
-          
+
           <label className="flex items-center gap-3 p-3 border rounded-lg mb-2 cursor-pointer">
             <input
               type="radio"
@@ -187,7 +195,7 @@ export default function CheckoutPage() {
               <div className="text-sm text-gray-500">{depositTotal()} ₴ зараз, решта при отриманні</div>
             </div>
           </label>
-          
+
           <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer">
             <input
               type="radio"
@@ -201,24 +209,29 @@ export default function CheckoutPage() {
             </div>
           </label>
         </div>
-      </form>
 
-      {/* Fixed bottom */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
-        <div className="max-w-lg mx-auto">
-          <div className="flex justify-between mb-3">
-            <span>До оплати:</span>
-            <span className="font-bold text-lg">{payAmount} ₴</span>
+        {/* Fixed bottom — всередині форми для роботи HTML-валідації */}
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+          <div className="max-w-lg mx-auto">
+            {errorMsg && (
+              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {errorMsg}
+              </div>
+            )}
+            <div className="flex justify-between mb-3">
+              <span>До оплати:</span>
+              <span className="font-bold text-lg">{payAmount} ₴</span>
+            </div>
+            <button
+              type="submit"
+              disabled={createOrder.isPending}
+              className="btn-primary w-full py-3 disabled:opacity-50"
+            >
+              {createOrder.isPending ? 'Обробка...' : 'Оплатити'}
+            </button>
           </div>
-          <button
-            onClick={handleSubmit}
-            disabled={createOrder.isPending}
-            className="btn-primary w-full py-3 disabled:opacity-50"
-          >
-            {createOrder.isPending ? 'Обробка...' : 'Оплатити'}
-          </button>
         </div>
-      </div>
+      </form>
     </div>
   )
 }
