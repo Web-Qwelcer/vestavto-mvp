@@ -60,28 +60,6 @@ async def health():
 
 
 
-# ── TEMP SEED ────────────────────────────────────────────────────────────────
-from fastapi import Header, HTTPException as _HTTPException
-from sqlalchemy import select as _select
-from app.database import async_session_maker as _session_maker
-from app.models import Manager as _Manager, UserRole as _UserRole
-from app.auth import create_access_token as _create_token
-
-@app.post("/api/seed-manager")
-async def seed_manager(x_admin_pass: str = Header(...)):
-    expected = os.getenv("ADMIN_PASS", "vestavto2026")
-    if x_admin_pass != expected:
-        raise _HTTPException(status_code=403, detail="Forbidden")
-    async with _session_maker() as session:
-        result = await session.execute(_select(_Manager).where(_Manager.telegram_id == 999999999))
-        mgr = result.scalar_one_or_none()
-        if not mgr:
-            mgr = _Manager(telegram_id=999999999, username="seed_manager",
-                           full_name="Seed Manager", role=_UserRole.MANAGER, is_active=True)
-            session.add(mgr); await session.commit(); await session.refresh(mgr)
-        return {"access_token": _create_token(mgr.id, mgr.telegram_id, mgr.role)}
-# ─────────────────────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
