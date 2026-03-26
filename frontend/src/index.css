@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --tg-theme-bg-color: #ffffff;
+  --tg-theme-text-color: #000000;
+  --tg-theme-button-color: #2563eb;
+  --tg-theme-button-text-color: #ffffff;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+}
+
+.btn-primary {
+  @apply bg-primary text-white px-4 py-2 rounded-lg font-medium transition-colors;
+}
+
+.btn-primary:hover {
+  @apply bg-blue-700;
+}
+
+.card {
+  @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4;
+}

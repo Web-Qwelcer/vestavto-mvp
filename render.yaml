@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: vestavto-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DEBUG
+        value: "false"
+      - key: PORT
+        value: "8000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: vestavto-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: TELEGRAM_CLIENT_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_MANAGER_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_MANAGER_CHAT_IDS
+        sync: false
+      - key: MONOBANK_API_TOKEN
+        sync: false
+      - key: MONOBANK_WEBHOOK_URL
+        sync: false
+      - key: NOVAPOSHTA_API_KEY
+        sync: false
+      - key: NP_SENDER_REF
+        sync: false
+      - key: NP_CONTACT_SENDER_REF
+        sync: false
+      - key: NP_SENDER_PHONE
+        sync: false
+      - key: NP_CITY_SENDER_REF
+        sync: false
+      - key: NP_WAREHOUSE_SENDER_REF
+        sync: false
+
+databases:
+  - name: vestavto-db
+    plan: free
+    databaseName: vestavto
+    user: vestavto

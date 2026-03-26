@@ -1,0 +1,1 @@
+"""VestAvto MVP App"""

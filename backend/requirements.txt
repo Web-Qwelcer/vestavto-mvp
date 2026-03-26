@@ -1,0 +1,30 @@
+# VestAvto MVP - Backend Dependencies
+
+# FastAPI
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# Database
+sqlalchemy[asyncio]>=2.0.25
+aiosqlite>=0.19.0
+asyncpg>=0.29.0
+
+# Auth
+python-jose[cryptography]>=3.3.0
+
+# HTTP client
+httpx>=0.26.0
+
+# Admin
+sqladmin>=0.16.0
+itsdangerous>=2.1.2
+
+# Utils
+python-dotenv>=1.0.0
+pydantic>=2.5.3
+pydantic-settings>=2.1.0
+
+# Dev
+pytest>=7.4.4
+pytest-asyncio>=0.23.3

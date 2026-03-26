@@ -1,0 +1,252 @@
+"""
+VestAvto MVP - Orders Routes
+"""
+from typing import List, Optional
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from app.database import get_session
+from app.models import Order, OrderItem, Product, OrderStatus, PaymentType, UserRole
+from app.schemas import (
+    OrderCreate, OrderResponse, OrderItemResponse, 
+    OrderStatusUpdate, UserInfo
+)
+from app.auth import get_current_user, get_current_manager
+
+router = APIRouter(prefix="/orders", tags=["Orders"])
+
+
+@router.post("", response_model=OrderResponse)
+async def create_order(
+    data: OrderCreate,
+    session: AsyncSession = Depends(get_session),
+    user: UserInfo = Depends(get_current_user)
+):
+    """Створити замовлення (клієнт)"""
+    if user.role != UserRole.CLIENT:
+        raise HTTPException(status_code=403, detail="Only clients can create orders")
+    
+    # Збираємо товари
+    product_ids = [item.product_id for item in data.items]
+    result = await session.execute(
+        select(Product).where(Product.id.in_(product_ids))
+    )
+    products = {p.id: p for p in result.scalars().all()}
+    
+    # Перевіряємо наявність
+    total = 0
+    deposit_total = 0
+    order_items = []
+    
+    for item in data.items:
+        product = products.get(item.product_id)
+        if not product:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Product {item.product_id} not found"
+            )
+        if not product.is_available:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Product '{product.name}' is not available"
+            )
+        
+        item_total = product.price * item.quantity
+        total += item_total
+        deposit_total += product.deposit * item.quantity
+        
+        order_items.append(OrderItem(
+            product_id=product.id,
+            quantity=item.quantity,
+            price=product.price
+        ))
+    
+    # Визначаємо суму до оплати
+    if data.payment_type == PaymentType.DEPOSIT:
+        pay_amount = deposit_total
+    else:
+        pay_amount = total
+    
+    # Створюємо замовлення
+    order = Order(
+        client_id=user.id,
+        status=OrderStatus.NEW,
+        payment_type=data.payment_type,
+        total_amount=total,
+        deposit_amount=deposit_total,
+        recipient_name=data.recipient_name,
+        recipient_phone=data.recipient_phone,
+        np_city_ref=data.np_city_ref,
+        np_city_name=data.np_city_name,
+        np_warehouse_ref=data.np_warehouse_ref,
+        np_warehouse_name=data.np_warehouse_name
+    )
+    order.items = order_items
+    
+    session.add(order)
+    await session.flush()
+    
+    # Позначаємо товари як недоступні
+    for item in data.items:
+        product = products[item.product_id]
+        product.is_available = False
+    
+    return await _order_to_response(order, products)
+
+
+@router.get("", response_model=List[OrderResponse])
+async def get_orders(
+    status: Optional[OrderStatus] = None,
+    session: AsyncSession = Depends(get_session),
+    user: UserInfo = Depends(get_current_user)
+):
+    """
+    Отримати замовлення.
+    Клієнт бачить свої, менеджер — всі.
+    """
+    query = select(Order).options(selectinload(Order.items))
+    
+    if user.role == UserRole.CLIENT:
+        query = query.where(Order.client_id == user.id)
+    
+    if status:
+        query = query.where(Order.status == status)
+    
+    query = query.order_by(Order.created_at.desc())
+    
+    result = await session.execute(query)
+    orders = result.scalars().all()
+    
+    # Завантажуємо products для items
+    product_ids = set()
+    for order in orders:
+        for item in order.items:
+            product_ids.add(item.product_id)
+    
+    if product_ids:
+        result = await session.execute(
+            select(Product).where(Product.id.in_(product_ids))
+        )
+        products = {p.id: p for p in result.scalars().all()}
+    else:
+        products = {}
+    
+    return [await _order_to_response(o, products) for o in orders]
+
+
+@router.get("/{order_id}", response_model=OrderResponse)
+async def get_order(
+    order_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: UserInfo = Depends(get_current_user)
+):
+    """Отримати замовлення за ID"""
+    result = await session.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id == order_id)
+    )
+    order = result.scalar_one_or_none()
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Перевірка доступу
+    if user.role == UserRole.CLIENT and order.client_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Products
+    product_ids = [item.product_id for item in order.items]
+    result = await session.execute(
+        select(Product).where(Product.id.in_(product_ids))
+    )
+    products = {p.id: p for p in result.scalars().all()}
+    
+    return await _order_to_response(order, products)
+
+
+@router.patch("/{order_id}/status", response_model=OrderResponse)
+async def update_order_status(
+    order_id: int,
+    data: OrderStatusUpdate,
+    session: AsyncSession = Depends(get_session),
+    manager: UserInfo = Depends(get_current_manager)
+):
+    """Оновити статус замовлення (менеджер)"""
+    result = await session.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id == order_id)
+    )
+    order = result.scalar_one_or_none()
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Оновлюємо статус
+    order.status = data.status
+    
+    # Встановлюємо timestamps
+    if data.status == OrderStatus.PAID:
+        order.paid_at = datetime.utcnow()
+    elif data.status == OrderStatus.SHIPPED:
+        order.shipped_at = datetime.utcnow()
+    elif data.status == OrderStatus.DELIVERED:
+        order.delivered_at = datetime.utcnow()
+    elif data.status == OrderStatus.CANCELLED:
+        # Повертаємо товари в наявність
+        for item in order.items:
+            result = await session.execute(
+                select(Product).where(Product.id == item.product_id)
+            )
+            product = result.scalar_one_or_none()
+            if product:
+                product.is_available = True
+    
+    # Призначаємо менеджера якщо ще не призначено
+    if not order.manager_id:
+        order.manager_id = manager.id
+    
+    await session.flush()
+    
+    product_ids = [item.product_id for item in order.items]
+    result = await session.execute(
+        select(Product).where(Product.id.in_(product_ids))
+    )
+    products = {p.id: p for p in result.scalars().all()}
+    
+    return await _order_to_response(order, products)
+
+
+async def _order_to_response(order: Order, products: dict) -> OrderResponse:
+    """Конвертувати Order в OrderResponse"""
+    items = []
+    for item in order.items:
+        product = products.get(item.product_id)
+        items.append(OrderItemResponse(
+            id=item.id,
+            product_id=item.product_id,
+            product_name=product.name if product else "Unknown",
+            quantity=item.quantity,
+            price=item.price
+        ))
+    
+    return OrderResponse(
+        id=order.id,
+        status=order.status,
+        payment_type=order.payment_type,
+        total_amount=order.total_amount,
+        deposit_amount=order.deposit_amount,
+        paid_amount=order.paid_amount,
+        recipient_name=order.recipient_name,
+        recipient_phone=order.recipient_phone,
+        np_city_name=order.np_city_name,
+        np_warehouse_name=order.np_warehouse_name,
+        ttn_number=order.ttn_number,
+        ttn_status=order.ttn_status,
+        created_at=order.created_at,
+        items=items
+    )
