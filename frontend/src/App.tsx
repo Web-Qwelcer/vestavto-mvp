@@ -29,6 +29,7 @@ declare global {
         ready: () => void
         expand: () => void
         close: () => void
+        openLink: (url: string) => void
         MainButton: {
           text: string
           show: () => void

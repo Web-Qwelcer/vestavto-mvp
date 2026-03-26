@@ -67,7 +67,13 @@ export default function CheckoutPage() {
           payment_type: form.payment_type
         })
         clearCart()
-        window.location.href = payRes.data.page_url
+        const pageUrl = payRes.data.page_url
+        const tg = window.Telegram?.WebApp
+        if (tg?.openLink) {
+          tg.openLink(pageUrl)
+        } else {
+          window.open(pageUrl, '_blank')
+        }
       } catch (err: any) {
         setErrorMsg(err?.response?.data?.detail || 'Помилка створення платежу')
       }
