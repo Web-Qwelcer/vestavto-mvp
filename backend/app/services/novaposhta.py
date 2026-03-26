@@ -2,41 +2,47 @@
 VestAvto MVP - Nova Poshta Service
 """
 import os
+import logging
+from datetime import datetime
 import httpx
 from typing import Optional, List
 
-NP_API_URL = "https://api.novaposhta.ua/v2.0/json/"
-NP_API_KEY = os.getenv("NOVAPOSHTA_API_KEY", "")
+logger = logging.getLogger(__name__)
 
-# Дані відправника
-NP_SENDER_REF = os.getenv("NP_SENDER_REF", "")
-NP_CONTACT_SENDER_REF = os.getenv("NP_CONTACT_SENDER_REF", "")
-NP_SENDER_PHONE = os.getenv("NP_SENDER_PHONE", "")
-NP_CITY_SENDER_REF = os.getenv("NP_CITY_SENDER_REF", "")
-NP_WAREHOUSE_SENDER_REF = os.getenv("NP_WAREHOUSE_SENDER_REF", "")
+NP_API_URL = "https://api.novaposhta.ua/v2.0/json/"
+
+# ── БАГ 4 FIX: змінні зчитуються через функцію, а не на рівні модуля.
+# Раніше при порожніх env vars значення назавжди залишались "".
+def _cfg(key: str) -> str:
+    return os.getenv(key, "")
 
 
 async def _call_api(model: str, method: str, properties: dict) -> Optional[dict]:
     """Виклик API Нової Пошти"""
+    api_key = _cfg("NOVAPOSHTA_API_KEY")
+    if not api_key:
+        logger.error("[NP] NOVAPOSHTA_API_KEY is not set — skipping API call")
+        return None
+
     payload = {
-        "apiKey": NP_API_KEY,
+        "apiKey": api_key,
         "modelName": model,
         "calledMethod": method,
         "methodProperties": properties
     }
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(NP_API_URL, json=payload, timeout=30)
             data = response.json()
-            
+
             if data.get("success"):
                 return data.get("data", [])
             else:
-                print(f"NP API Error: {data.get('errors')}")
+                logger.error(f"[NP] API Error model={model} method={method}: {data.get('errors')}")
                 return None
         except Exception as e:
-            print(f"NP API request error: {e}")
+            logger.exception(f"[NP] Request error model={model} method={method}: {e}")
             return None
 
 
@@ -111,30 +117,51 @@ async def create_ttn(
         first_name = ""
         middle_name = ""
     
+    # ── БАГ 5 FIX: перевіряємо що всі обов'язкові env vars задані
+    sender_ref      = _cfg("NP_SENDER_REF")
+    contact_sender  = _cfg("NP_CONTACT_SENDER_REF")
+    sender_phone    = _cfg("NP_SENDER_PHONE")
+    city_sender_ref = _cfg("NP_CITY_SENDER_REF")
+    warehouse_sender= _cfg("NP_WAREHOUSE_SENDER_REF")
+
+    missing = [k for k, v in {
+        "NP_SENDER_REF": sender_ref,
+        "NP_CONTACT_SENDER_REF": contact_sender,
+        "NP_SENDER_PHONE": sender_phone,
+        "NP_CITY_SENDER_REF": city_sender_ref,
+        "NP_WAREHOUSE_SENDER_REF": warehouse_sender,
+    }.items() if not v]
+    if missing:
+        logger.error(f"[NP] Cannot create TTN — missing env vars: {missing}")
+        return None
+
+    # ── БАГ 6 FIX: DateTime: "" → поточна дата у форматі НП "DD.MM.YYYY"
+    today = datetime.now().strftime("%d.%m.%Y")
+
     properties = {
         "PayerType": "Recipient" if payment_method == "Cash" else "Sender",
         "PaymentMethod": payment_method,
-        "DateTime": "",  # Поточна дата
+        "DateTime": today,
         "CargoType": "Parcel",
         "Weight": str(weight),
         "SeatsAmount": str(seats_amount),
         "Description": description,
         "Cost": str(int(cost)),
         "ServiceType": "WarehouseWarehouse",
-        
+
         # Відправник
-        "CitySender": NP_CITY_SENDER_REF,
-        "Sender": NP_SENDER_REF,
-        "SenderAddress": NP_WAREHOUSE_SENDER_REF,
-        "ContactSender": NP_CONTACT_SENDER_REF,
-        "SendersPhone": NP_SENDER_PHONE,
-        
+        "CitySender": city_sender_ref,
+        "Sender": sender_ref,
+        "SenderAddress": warehouse_sender,
+        "ContactSender": contact_sender,
+        "SendersPhone": sender_phone,
+
         # Отримувач
         "CityRecipient": city_ref,
         "RecipientAddress": warehouse_ref,
         "RecipientsPhone": recipient_phone,
         "RecipientName": recipient_name,
-        
+
         # Для нового контрагента
         "NewAddress": "1",
         "RecipientCityName": "",

@@ -1,6 +1,7 @@
 """
 VestAvto MVP - Payments Routes
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -10,6 +11,8 @@ from app.models import Order, Payment, OrderStatus, PaymentType
 from app.schemas import PaymentCreate, PaymentResponse, MonobankWebhook, UserInfo
 from app.auth import get_current_user, get_current_manager
 from app.services import monobank, novaposhta
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -96,7 +99,12 @@ async def monobank_webhook(
     if status == "success":
         # Визначаємо тип оплати
         amount = data.get("amount", 0) / 100  # копійки → гривні
-        
+
+        logger.info(
+            f"[Webhook] SUCCESS invoice={invoice_id} order={order.id} "
+            f"amount={amount} payment_type={order.payment_type}"
+        )
+
         # Записуємо платіж
         payment = Payment(
             order_id=order.id,
@@ -106,17 +114,22 @@ async def monobank_webhook(
             monobank_status=status
         )
         session.add(payment)
-        
+
         # Оновлюємо замовлення
         order.paid_amount += amount
-        
+
+        # ── БАГ 1 FIX: ТТН створювалась ТІЛЬКИ при full-оплаті.
+        # Тепер: при deposit → DEPOSIT_PAID + автоматична ТТН (накладений платіж).
+        #        при full   → PAID + автоматична ТТН (передплата).
         if order.payment_type == PaymentType.DEPOSIT:
             order.status = OrderStatus.DEPOSIT_PAID
+            background_tasks.add_task(create_ttn_for_order, order.id)
+            logger.info(f"[Webhook] Scheduled TTN creation for deposit order={order.id}")
         elif order.paid_amount >= order.total_amount:
             order.status = OrderStatus.PAID
-            # Створюємо ТТН у фоні
             background_tasks.add_task(create_ttn_for_order, order.id)
-        
+            logger.info(f"[Webhook] Scheduled TTN creation for full-paid order={order.id}")
+
         await session.commit()
     
     elif status in ["expired", "failure"]:
@@ -169,33 +182,66 @@ async def verify_payment_manually(
 async def create_ttn_for_order(order_id: int):
     """Фонова задача: створити ТТН після оплати"""
     from app.database import async_session_maker
-    
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Order).where(Order.id == order_id)
-        )
-        order = result.scalar_one_or_none()
-        
-        if not order or order.status != OrderStatus.PAID:
-            return
-        
-        # Визначаємо метод оплати для НП
-        # Якщо був завдаток — решта накладеним платежем
-        remaining = order.total_amount - order.paid_amount
-        payment_method = "Cash" if remaining > 0 else "NonCash"
-        
-        ttn = await novaposhta.create_ttn(
-            recipient_name=order.recipient_name,
-            recipient_phone=order.recipient_phone,
-            city_ref=order.np_city_ref,
-            warehouse_ref=order.np_warehouse_ref,
-            description=f"Автозапчастини. Замовлення #{order.id}",
-            cost=order.total_amount,
-            payment_method=payment_method
-        )
-        
-        if ttn:
-            order.ttn_number = ttn["ttn_number"]
-            order.ttn_ref = ttn["ttn_ref"]
-            order.status = OrderStatus.PROCESSING
-            await session.commit()
+
+    logger.info(f"[TTN BG] Starting TTN creation for order={order_id}")
+
+    try:
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Order).where(Order.id == order_id)
+            )
+            order = result.scalar_one_or_none()
+
+            # ── БАГ 2 FIX: раніше пропускало DEPOSIT_PAID замовлення.
+            # Тепер дозволяємо обидва статуси.
+            if not order:
+                logger.warning(f"[TTN BG] Order {order_id} not found")
+                return
+            if order.status not in (OrderStatus.PAID, OrderStatus.DEPOSIT_PAID):
+                logger.warning(
+                    f"[TTN BG] Order {order_id} has unexpected status={order.status}, skipping"
+                )
+                return
+
+            if order.ttn_number:
+                logger.info(f"[TTN BG] Order {order_id} already has TTN={order.ttn_number}, skipping")
+                return
+
+            # Визначаємо метод оплати для НП:
+            # DEPOSIT_PAID → решта накладеним платежем (Cash)
+            # PAID         → передплата (NonCash)
+            remaining = order.total_amount - order.paid_amount
+            payment_method = "Cash" if remaining > 0 else "NonCash"
+
+            logger.info(
+                f"[TTN BG] Creating TTN order={order_id} method={payment_method} "
+                f"remaining={remaining} city_ref={order.np_city_ref}"
+            )
+
+            ttn = await novaposhta.create_ttn(
+                recipient_name=order.recipient_name,
+                recipient_phone=order.recipient_phone,
+                city_ref=order.np_city_ref,
+                warehouse_ref=order.np_warehouse_ref,
+                description=f"Автозапчастини. Замовлення #{order_id}",
+                cost=order.total_amount,
+                payment_method=payment_method
+            )
+
+            if ttn:
+                order.ttn_number = ttn["ttn_number"]
+                order.ttn_ref    = ttn["ttn_ref"]
+                order.status     = OrderStatus.PROCESSING
+                await session.commit()
+                logger.info(f"[TTN BG] TTN created: {ttn['ttn_number']} for order={order_id}")
+            else:
+                # ── БАГ 3 FIX: раніше помилка НП ковталась мовчки.
+                logger.error(
+                    f"[TTN BG] Nova Poshta returned None for order={order_id}. "
+                    "Check NP env vars: NOVAPOSHTA_API_KEY, NP_SENDER_REF, "
+                    "NP_CONTACT_SENDER_REF, NP_SENDER_PHONE, "
+                    "NP_CITY_SENDER_REF, NP_WAREHOUSE_SENDER_REF"
+                )
+
+    except Exception as exc:
+        logger.exception(f"[TTN BG] Unhandled exception for order={order_id}: {exc}")
