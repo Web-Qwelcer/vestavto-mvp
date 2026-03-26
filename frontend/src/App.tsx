@@ -53,7 +53,7 @@ declare global {
 }
 
 function App() {
-  const { login, isManager } = useAuthStore()
+  const { login } = useAuthStore()
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp

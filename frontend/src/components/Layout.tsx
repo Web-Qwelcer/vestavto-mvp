@@ -1,11 +1,10 @@
-import { Outlet, Link, useLocation } from 'react-router-dom'
+import { Outlet, Link } from 'react-router-dom'
 import { useCartStore } from '../store/cart'
 import { useAuthStore } from '../store/auth'
 
 export default function Layout() {
-  const location = useLocation()
   const itemsCount = useCartStore(s => s.itemsCount())
-  const { isManager, user } = useAuthStore()
+  const { isManager } = useAuthStore()
 
   return (
     <div className="min-h-screen bg-gray-50">

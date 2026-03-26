@@ -1,11 +1,9 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import api from '../api'
 import { useCartStore } from '../store/cart'
 
 export default function CheckoutPage() {
-  const navigate = useNavigate()
   const { items, total, depositTotal, clearCart } = useCartStore()
   
   const [form, setForm] = useState({

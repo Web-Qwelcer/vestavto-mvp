@@ -35,7 +35,7 @@ export const useAuthStore = create<AuthState>()(
           const response = await api.post('/auth/telegram', null, {
             params: { init_data: initData }
           })
-          const { access_token, role, user_id } = response.data
+          const { access_token, role } = response.data
           
           set({
             token: access_token,
