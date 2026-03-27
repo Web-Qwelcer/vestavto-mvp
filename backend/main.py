@@ -60,6 +60,33 @@ async def health():
 
 
 
+# ── TEMP DEBUG ───────────────────────────────────────────────────────────────
+import traceback as _traceback
+from sqlalchemy import select as _sel2, text as _text
+
+@app.get("/api/products-debug")
+async def products_debug():
+    from app.models import Product as _Product
+    try:
+        async with _session_maker() as session:
+            r = await session.execute(_sel2(_Product).limit(3))
+            rows = r.scalars().all()
+            return {"ok": True, "count": len(rows),
+                    "first": str(rows[0].__dict__) if rows else None}
+    except Exception as e:
+        return {"error": str(e), "trace": _traceback.format_exc()}
+
+@app.get("/api/db-check")
+async def db_check():
+    try:
+        async with _session_maker() as session:
+            r = await session.execute(_text("SELECT current_database(), version()"))
+            row = r.fetchone()
+            return {"db": row[0], "version": row[1][:50]}
+    except Exception as e:
+        return {"error": str(e)}
+# ── TEMP DEBUG END ────────────────────────────────────────────────────────────
+
 # ── TEMP SEED ────────────────────────────────────────────────────────────────
 from fastapi import Header, HTTPException as _HTTPException
 from sqlalchemy import select as _select
