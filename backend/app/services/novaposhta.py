@@ -98,6 +98,7 @@ async def create_ttn(
     warehouse_ref: str,
     description: str,
     cost: float,
+    cash_on_delivery: float = 0,  # сума до стягнення при отриманні (total - paid)
     weight: float = 1,
     seats_amount: int = 1,
     payment_method: str = "NonCash"  # NonCash = передплата, Cash = накладений платіж
@@ -172,12 +173,14 @@ async def create_ttn(
         "MiddleName": middle_name,
     }
     
-    # Якщо накладений платіж — додаємо суму
+    # Якщо накладений платіж — додаємо точну суму до стягнення:
+    # DEPOSIT_PAID → cash_on_delivery = total - deposit (решта після завдатку)
+    # PAID         → cash_on_delivery = 0, payment_method = NonCash (не потрапляємо сюди)
     if payment_method == "Cash":
         properties["BackwardDeliveryData"] = [{
             "PayerType": "Recipient",
             "CargoType": "Money",
-            "RedeliveryString": str(int(cost))
+            "RedeliveryString": str(int(cash_on_delivery))
         }]
     
     result = await _call_api("InternetDocument", "save", properties)

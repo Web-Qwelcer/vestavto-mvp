@@ -225,6 +225,7 @@ async def create_ttn_for_order(order_id: int):
                 warehouse_ref=order.np_warehouse_ref,
                 description=f"Автозапчастини. Замовлення #{order_id}",
                 cost=order.total_amount,
+                cash_on_delivery=remaining,
                 payment_method=payment_method
             )
 
