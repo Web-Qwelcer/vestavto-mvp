@@ -3,7 +3,7 @@ VestAvto MVP - Orders Routes
 """
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -11,10 +11,11 @@ from sqlalchemy.orm import selectinload
 from app.database import get_session
 from app.models import Order, OrderItem, Product, OrderStatus, PaymentType, UserRole
 from app.schemas import (
-    OrderCreate, OrderResponse, OrderItemResponse, 
+    OrderCreate, OrderResponse, OrderItemResponse,
     OrderStatusUpdate, UserInfo
 )
 from app.auth import get_current_user, get_current_manager
+from app.services.telegram_notify import send_manager_notification
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -22,6 +23,7 @@ router = APIRouter(prefix="/orders", tags=["Orders"])
 @router.post("", response_model=OrderResponse)
 async def create_order(
     data: OrderCreate,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
     user: UserInfo = Depends(get_current_user)
 ):
@@ -93,8 +95,22 @@ async def create_order(
     for item in data.items:
         product = products[item.product_id]
         product.is_available = False
-    
-    return await _order_to_response(order, products)
+
+    response = await _order_to_response(order, products)
+
+    items_text = "\n".join(
+        f"  • {products[item.product_id].name} x{item.quantity}"
+        for item in data.items
+    )
+    background_tasks.add_task(
+        send_manager_notification,
+        f"📦 Нове замовлення #{order.id}\n"
+        f"👤 {data.recipient_name} {data.recipient_phone}\n"
+        f"🛒 {items_text}\n"
+        f"💰 {total:.0f} грн"
+    )
+
+    return response
 
 
 @router.get("", response_model=List[OrderResponse])

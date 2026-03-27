@@ -11,6 +11,7 @@ from app.models import Order, Payment, OrderStatus, PaymentType
 from app.schemas import PaymentCreate, PaymentResponse, MonobankWebhook, UserInfo
 from app.auth import get_current_user, get_current_manager
 from app.services import monobank, novaposhta
+from app.services.telegram_notify import send_manager_notification
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,13 @@ async def monobank_webhook(
             logger.info(f"[Webhook] Scheduled TTN creation for full-paid order={order.id}")
 
         await session.commit()
+
+        background_tasks.add_task(
+            send_manager_notification,
+            f"✅ Замовлення #{order.id} оплачено\n"
+            f"👤 {order.recipient_name}\n"
+            f"💰 {amount:.0f} грн"
+        )
     
     elif status in ["expired", "failure"]:
         order.status = OrderStatus.NEW
@@ -235,6 +243,10 @@ async def create_ttn_for_order(order_id: int):
                 order.status     = OrderStatus.PROCESSING
                 await session.commit()
                 logger.info(f"[TTN BG] TTN created: {ttn['ttn_number']} for order={order_id}")
+                await send_manager_notification(
+                    f"🚚 ТТН створено: {ttn['ttn_number']}\n"
+                    f"Замовлення #{order_id}"
+                )
             else:
                 # ── БАГ 3 FIX: раніше помилка НП ковталась мовчки.
                 logger.error(
