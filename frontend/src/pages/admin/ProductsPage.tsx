@@ -5,12 +5,14 @@ import { useAuthStore } from '../../store/auth'
 import { Navigate } from 'react-router-dom'
 
 export default function AdminProductsPage() {
-  const { isManager, isLoading: authLoading, token } = useAuthStore()
+  const { isManager, isLoading: authLoading } = useAuthStore()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [uploadingId, setUploadingId] = useState<number | null>(null)
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const addPhotoInputRef = useRef<HTMLInputElement>(null)
   const uploadTargetId = useRef<number | null>(null)
   const [form, setForm] = useState({
     name: '',
@@ -20,62 +22,73 @@ export default function AdminProductsPage() {
     category: 'engine',
     car_model: 'superb_2_pre',
     photos: [] as string[],
-    is_available: true
+    is_available: true,
   })
 
-  // Чекаємо поки авторизація завершиться — не редіректимо передчасно
-  if (authLoading) return <div className="p-4 text-center text-gray-700">Завантаження...</div>
-  if (!isManager) return <Navigate to="/" />
-
+  // ALL hooks must come before any conditional returns
   const { data: products, isLoading } = useQuery({
     queryKey: ['admin-products'],
     queryFn: async () => {
       const res = await api.get('/products', { params: { available_only: false } })
       return res.data
-    }
+    },
+    enabled: isManager && !authLoading,
   })
+
+  const uploadPhotos = async (productId: number, files: File[]) => {
+    for (const file of files) {
+      const formData = new FormData()
+      formData.append('file', file)
+      await api.post(`/products/${productId}/upload-image`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+    }
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const data = {
         ...form,
         price: parseFloat(form.price),
-        deposit: parseFloat(form.deposit) || 0
+        deposit: parseFloat(form.deposit) || 0,
       }
-      if (editId) {
-        return api.put(`/products/${editId}`, data)
-      }
+      if (editId) return api.put(`/products/${editId}`, data)
       return api.post('/products', data)
     },
-    onSuccess: () => {
+    onSuccess: async (res) => {
+      if (pendingPhotos.length > 0) {
+        const productId = editId ?? res.data.id
+        setUploadingId(productId)
+        try {
+          await uploadPhotos(productId, pendingPhotos)
+        } finally {
+          setUploadingId(null)
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ['admin-products'] })
       resetForm()
-    }
+    },
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.delete(`/products/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-products'] })
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-products'] }),
   })
 
+  // Handlers
   const handleUploadClick = (productId: number) => {
     uploadTargetId.current = productId
     fileInputRef.current?.click()
   }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+    const files = Array.from(e.target.files || [])
     const id = uploadTargetId.current
-    if (!file || !id) return
+    if (!files.length || !id) return
     e.target.value = ''
-
     setUploadingId(id)
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      await api.post(`/products/${id}/upload-image`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      await uploadPhotos(id, files)
       queryClient.invalidateQueries({ queryKey: ['admin-products'] })
     } catch (err: any) {
       alert(err?.response?.data?.detail || 'Помилка завантаження')
@@ -84,74 +97,97 @@ export default function AdminProductsPage() {
     }
   }
 
+  const handleAddPendingPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length) setPendingPhotos((prev) => [...prev, ...files])
+    e.target.value = ''
+  }
+
   const resetForm = () => {
-    setForm({ name: '', description: '', price: '', deposit: '', category: 'engine', car_model: 'superb_2_pre', photos: [], is_available: true })
+    setForm({
+      name: '',
+      description: '',
+      price: '',
+      deposit: '',
+      category: 'engine',
+      car_model: 'superb_2_pre',
+      photos: [],
+      is_available: true,
+    })
     setEditId(null)
     setShowForm(false)
+    setPendingPhotos([])
   }
 
   const editProduct = (p: any) => {
     setForm({
-      name: p.name,
-      description: p.description || '',
-      price: String(p.price),
-      deposit: String(p.deposit || 0),
-      category: p.category,
-      car_model: p.car_model,
-      photos: p.photos || [],
-      is_available: p.is_available
+      name: p.name ?? '',
+      description: p.description ?? '',
+      price: String(p.price ?? ''),
+      deposit: String(p.deposit ?? 0),
+      category: p.category ?? 'engine',
+      car_model: p.car_model ?? 'superb_2_pre',
+      photos: p.photos ?? [],
+      is_available: p.is_available ?? true,
     })
     setEditId(p.id)
     setShowForm(true)
+    setPendingPhotos([])
   }
 
+  // Conditional returns AFTER all hooks
+  if (authLoading) return <div className="p-4 text-center text-gray-900">Завантаження...</div>
+  if (!isManager) return <Navigate to="/" />
+
   return (
-    <div className="p-4">
+    <div className="p-4 text-gray-900">
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-xl font-bold">Товари</h1>
-        <button onClick={() => setShowForm(true)} className="btn-primary">
+        <h1 className="text-xl font-bold text-gray-900">Товари</h1>
+        <button onClick={() => { resetForm(); setShowForm(true) }} className="btn-primary">
           + Додати
         </button>
       </div>
 
       {showForm && (
-        <div className="card mb-4">
-          <h2 className="font-medium mb-3">{editId ? 'Редагувати' : 'Новий товар'}</h2>
+        <div className="card mb-4 bg-white">
+          <h2 className="font-semibold mb-3 text-gray-900">
+            {editId ? 'Редагувати товар' : 'Новий товар'}
+          </h2>
           <div className="space-y-3">
             <input
-              placeholder="Назва"
+              placeholder="Назва *"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full p-2 border rounded bg-white text-gray-900"
+              className="w-full p-2 border border-gray-300 rounded bg-white text-gray-900 placeholder-gray-400"
             />
             <textarea
               placeholder="Опис"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full p-2 border rounded bg-white text-gray-900"
+              className="w-full p-2 border border-gray-300 rounded bg-white text-gray-900 placeholder-gray-400"
               rows={3}
             />
             <div className="grid grid-cols-2 gap-2">
               <input
                 type="number"
-                placeholder="Ціна"
+                placeholder="Ціна (грн) *"
                 value={form.price}
                 onChange={(e) => setForm({ ...form, price: e.target.value })}
-                className="p-2 border rounded bg-white text-gray-900"
+                className="p-2 border border-gray-300 rounded bg-white text-gray-900 placeholder-gray-400"
               />
               <input
                 type="number"
-                placeholder="Завдаток"
+                placeholder="Завдаток (грн)"
                 value={form.deposit}
                 onChange={(e) => setForm({ ...form, deposit: e.target.value })}
-                className="p-2 border rounded bg-white text-gray-900"
+                className="p-2 border border-gray-300 rounded bg-white text-gray-900 placeholder-gray-400"
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <select
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
-                className="p-2 border rounded bg-white text-gray-900"
+                className="p-2 border border-gray-300 rounded bg-white text-gray-900"
               >
                 <option value="engine">Двигун</option>
                 <option value="transmission">Трансмісія</option>
@@ -164,7 +200,7 @@ export default function AdminProductsPage() {
               <select
                 value={form.car_model}
                 onChange={(e) => setForm({ ...form, car_model: e.target.value })}
-                className="p-2 border rounded bg-white text-gray-900"
+                className="p-2 border border-gray-300 rounded bg-white text-gray-900"
               >
                 <option value="superb_2_pre">Superb 2 дорест</option>
                 <option value="superb_2_rest">Superb 2 рест</option>
@@ -175,7 +211,7 @@ export default function AdminProductsPage() {
                 <option value="other">Інше</option>
               </select>
             </div>
-            <label className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-gray-900">
               <input
                 type="checkbox"
                 checked={form.is_available}
@@ -183,11 +219,70 @@ export default function AdminProductsPage() {
               />
               В наявності
             </label>
+
+            {/* Photo section */}
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">Фото</p>
+              <div className="flex flex-wrap gap-2">
+                {/* Existing photos (edit mode) */}
+                {form.photos.map((url, i) => (
+                  <div key={`ex-${i}`} className="relative w-16 h-16">
+                    <img src={url} alt="" className="w-full h-full object-cover rounded-lg" />
+                  </div>
+                ))}
+                {/* Newly selected photos */}
+                {pendingPhotos.map((file, i) => (
+                  <div key={`new-${i}`} className="relative w-16 h-16">
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt=""
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center leading-none"
+                      onClick={() => setPendingPhotos((prev) => prev.filter((_, idx) => idx !== i))}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {/* Add photo button */}
+                <button
+                  type="button"
+                  onClick={() => addPhotoInputRef.current?.click()}
+                  className="w-16 h-16 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400 text-2xl hover:border-blue-400 hover:text-blue-400 transition-colors"
+                >
+                  +
+                </button>
+              </div>
+              <input
+                ref={addPhotoInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleAddPendingPhoto}
+              />
+              {pendingPhotos.length > 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {pendingPhotos.length} фото обрано — завантажаться після збереження
+                </p>
+              )}
+            </div>
+
             <div className="flex gap-2">
-              <button onClick={() => saveMutation.mutate()} className="btn-primary flex-1">
-                Зберегти
+              <button
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
+                className="btn-primary flex-1 disabled:opacity-60"
+              >
+                {saveMutation.isPending ? 'Збереження...' : 'Зберегти'}
               </button>
-              <button onClick={resetForm} className="px-4 py-2 border rounded">
+              <button
+                onClick={resetForm}
+                className="px-4 py-2 border border-gray-300 rounded text-gray-700 bg-white"
+              >
                 Скасувати
               </button>
             </div>
@@ -195,22 +290,26 @@ export default function AdminProductsPage() {
         </div>
       )}
 
-      {/* Hidden file input for photo upload */}
+      {/* Hidden file input for thumbnail-click upload */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
         onChange={handleFileChange}
       />
 
       {isLoading ? (
-        <div className="text-center py-8">Завантаження...</div>
+        <div className="text-center py-8 text-gray-700">Завантаження...</div>
       ) : (
         <div className="space-y-2">
+          {(!products || products.length === 0) && (
+            <p className="text-center text-gray-500 py-8">Товарів немає</p>
+          )}
           {products?.map((p: any) => (
-            <div key={p.id} className="card flex gap-3 items-center">
-              {/* Thumbnail */}
+            <div key={p.id} className="card flex gap-3 items-center bg-white">
+              {/* Thumbnail — click to upload photo */}
               <div
                 className="w-14 h-14 rounded-lg bg-gray-100 flex-shrink-0 overflow-hidden cursor-pointer relative"
                 onClick={() => handleUploadClick(p.id)}
@@ -219,7 +318,9 @@ export default function AdminProductsPage() {
                 {p.photos?.[0] ? (
                   <img src={p.photos[0]} alt={p.name} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Фото</div>
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs text-center leading-tight px-1">
+                    + фото
+                  </div>
                 )}
                 {uploadingId === p.id && (
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
@@ -229,15 +330,26 @@ export default function AdminProductsPage() {
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm truncate">{p.name}</div>
-                <div className="text-xs text-gray-500">{p.price} ₴ • {p.is_available ? '✓ є' : '✗ немає'}</div>
+                <div className="font-medium text-sm truncate text-gray-900">{p.name}</div>
+                <div className="text-xs text-gray-500">
+                  {p.price} ₴{p.deposit ? ` • завдаток ${p.deposit} ₴` : ''} •{' '}
+                  {p.is_available ? '✓ є' : '✗ немає'}
+                </div>
               </div>
 
-              <div className="flex gap-2 flex-shrink-0">
-                <button onClick={() => editProduct(p)} className="text-primary text-sm">
+              <div className="flex gap-3 flex-shrink-0">
+                <button
+                  onClick={() => editProduct(p)}
+                  className="text-blue-600 text-sm font-medium"
+                >
                   Ред.
                 </button>
-                <button onClick={() => deleteMutation.mutate(p.id)} className="text-red-500 text-sm">
+                <button
+                  onClick={() => {
+                    if (confirm(`Видалити "${p.name}"?`)) deleteMutation.mutate(p.id)
+                  }}
+                  className="text-red-500 text-sm font-medium"
+                >
                   Вид.
                 </button>
               </div>
