@@ -5,7 +5,7 @@ import { useAuthStore } from '../../store/auth'
 import { Navigate } from 'react-router-dom'
 
 export default function AdminProductsPage() {
-  const { isManager } = useAuthStore()
+  const { isManager, isLoading: authLoading, token } = useAuthStore()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -23,6 +23,8 @@ export default function AdminProductsPage() {
     is_available: true
   })
 
+  // Якщо є токен але ще йде завантаження — чекаємо (не редіректимо передчасно)
+  if (token && authLoading) return <div className="p-4 text-center">Завантаження...</div>
   if (!isManager) return <Navigate to="/" />
 
   const { data: products, isLoading } = useQuery({

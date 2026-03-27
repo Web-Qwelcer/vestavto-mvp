@@ -77,7 +77,8 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'vestavto-auth',
-      partialize: (state) => ({ token: state.token })
+      // Зберігаємо token + isManager щоб після reload не було redirect до /
+      partialize: (state) => ({ token: state.token, isManager: state.isManager })
     }
   )
 )
