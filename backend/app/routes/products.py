@@ -11,8 +11,6 @@ from app.database import get_session
 from app.models import Product, Category, CarModel
 from app.schemas import ProductCreate, ProductUpdate, ProductResponse, UserInfo
 from app.auth import get_current_user, get_current_manager
-from app.services.cloudinary_service import upload_image
-
 router = APIRouter(prefix="/products", tags=["Products"])
 
 
@@ -183,6 +181,7 @@ async def upload_product_image(
         raise HTTPException(status_code=400, detail="Image too large (max 10 MB)")
 
     try:
+        from app.services.cloudinary_service import upload_image
         url = await upload_image(file_bytes, product_id)
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=f"Upload failed: {exc}")
