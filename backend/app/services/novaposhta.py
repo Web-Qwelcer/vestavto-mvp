@@ -9,6 +9,14 @@ from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
+# Імпорт відкладено щоб уникнути циклічних залежностей
+async def _notify_error(error: str, context: str) -> None:
+    try:
+        from app.services.telegram_notify import send_error_notification
+        await send_error_notification(error, context)
+    except Exception as exc:
+        logger.exception(f"[NP] Failed to send error notification: {exc}")
+
 NP_API_URL = "https://api.novaposhta.ua/v2.0/json/"
 
 # ── БАГ 4 FIX: змінні зчитуються через функцію, а не на рівні модуля.
@@ -133,7 +141,9 @@ async def create_ttn(
         "NP_WAREHOUSE_SENDER_REF": warehouse_sender,
     }.items() if not v]
     if missing:
-        logger.error(f"[NP] Cannot create TTN — missing env vars: {missing}")
+        msg = f"Не задані env vars: {missing}"
+        logger.error(f"[NP] Cannot create TTN — {msg}")
+        await _notify_error(msg, "Nova Poshta — створення ТТН")
         return None
 
     # ── БАГ 6 FIX: DateTime: "" → поточна дата у форматі НП "DD.MM.YYYY"

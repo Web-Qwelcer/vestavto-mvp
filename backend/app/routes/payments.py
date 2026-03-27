@@ -11,7 +11,7 @@ from app.models import Order, Payment, OrderStatus, PaymentType
 from app.schemas import PaymentCreate, PaymentResponse, MonobankWebhook, UserInfo
 from app.auth import get_current_user, get_current_manager
 from app.services import monobank, novaposhta
-from app.services.telegram_notify import send_manager_notification
+from app.services.telegram_notify import send_manager_notification, send_error_notification
 
 logger = logging.getLogger(__name__)
 
@@ -106,39 +106,44 @@ async def monobank_webhook(
             f"amount={amount} payment_type={order.payment_type}"
         )
 
-        # Записуємо платіж
-        payment = Payment(
-            order_id=order.id,
-            amount=amount,
-            payment_type=order.payment_type,
-            monobank_invoice_id=invoice_id,
-            monobank_status=status
-        )
-        session.add(payment)
+        try:
+            # Записуємо платіж
+            payment = Payment(
+                order_id=order.id,
+                amount=amount,
+                payment_type=order.payment_type,
+                monobank_invoice_id=invoice_id,
+                monobank_status=status
+            )
+            session.add(payment)
 
-        # Оновлюємо замовлення
-        order.paid_amount += amount
+            # Оновлюємо замовлення
+            order.paid_amount += amount
 
-        # ── БАГ 1 FIX: ТТН створювалась ТІЛЬКИ при full-оплаті.
-        # Тепер: при deposit → DEPOSIT_PAID + автоматична ТТН (накладений платіж).
-        #        при full   → PAID + автоматична ТТН (передплата).
-        if order.payment_type == PaymentType.DEPOSIT:
-            order.status = OrderStatus.DEPOSIT_PAID
-            background_tasks.add_task(create_ttn_for_order, order.id)
-            logger.info(f"[Webhook] Scheduled TTN creation for deposit order={order.id}")
-        elif order.paid_amount >= order.total_amount:
-            order.status = OrderStatus.PAID
-            background_tasks.add_task(create_ttn_for_order, order.id)
-            logger.info(f"[Webhook] Scheduled TTN creation for full-paid order={order.id}")
+            if order.payment_type == PaymentType.DEPOSIT:
+                order.status = OrderStatus.DEPOSIT_PAID
+                background_tasks.add_task(create_ttn_for_order, order.id)
+                logger.info(f"[Webhook] Scheduled TTN creation for deposit order={order.id}")
+            elif order.paid_amount >= order.total_amount:
+                order.status = OrderStatus.PAID
+                background_tasks.add_task(create_ttn_for_order, order.id)
+                logger.info(f"[Webhook] Scheduled TTN creation for full-paid order={order.id}")
 
-        await session.commit()
+            await session.commit()
 
-        background_tasks.add_task(
-            send_manager_notification,
-            f"✅ Замовлення #{order.id} оплачено\n"
-            f"👤 {order.recipient_name}\n"
-            f"💰 {amount:.0f} грн"
-        )
+            background_tasks.add_task(
+                send_manager_notification,
+                f"✅ Замовлення #{order.id} оплачено\n"
+                f"👤 {order.recipient_name}\n"
+                f"💰 {amount:.0f} грн"
+            )
+        except Exception as exc:
+            logger.exception(f"[Webhook] Error processing payment for order={order.id}: {exc}")
+            background_tasks.add_task(
+                send_error_notification,
+                str(exc),
+                f"Webhook оплати — замовлення #{order.id}, invoice={invoice_id}"
+            )
     
     elif status in ["expired", "failure"]:
         order.status = OrderStatus.NEW
@@ -248,13 +253,15 @@ async def create_ttn_for_order(order_id: int):
                     f"Замовлення #{order_id}"
                 )
             else:
-                # ── БАГ 3 FIX: раніше помилка НП ковталась мовчки.
-                logger.error(
-                    f"[TTN BG] Nova Poshta returned None for order={order_id}. "
-                    "Check NP env vars: NOVAPOSHTA_API_KEY, NP_SENDER_REF, "
+                msg = (
+                    f"Nova Poshta повернула None для замовлення #{order_id}. "
+                    "Перевір env vars: NOVAPOSHTA_API_KEY, NP_SENDER_REF, "
                     "NP_CONTACT_SENDER_REF, NP_SENDER_PHONE, "
                     "NP_CITY_SENDER_REF, NP_WAREHOUSE_SENDER_REF"
                 )
+                logger.error(f"[TTN BG] {msg}")
+                await send_error_notification(msg, f"Автоматичне створення ТТН — замовлення #{order_id}")
 
     except Exception as exc:
         logger.exception(f"[TTN BG] Unhandled exception for order={order_id}: {exc}")
+        await send_error_notification(str(exc), f"Автоматичне створення ТТН — замовлення #{order_id}")

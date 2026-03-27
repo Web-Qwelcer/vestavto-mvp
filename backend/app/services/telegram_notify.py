@@ -3,6 +3,7 @@ VestAvto MVP - Telegram Manager Notifications
 """
 import os
 import logging
+from datetime import datetime
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -36,3 +37,21 @@ async def send_manager_notification(text: str) -> None:
                     logger.error(f"[TG] sendMessage failed for chat_id={chat_id}: {resp.text}")
             except Exception as exc:
                 logger.exception(f"[TG] Request error for chat_id={chat_id}: {exc}")
+
+
+async def send_error_notification(error: str, context: str) -> None:
+    """
+    Надіслати сповіщення про помилку менеджеру(ам).
+    Ніколи не кидає виключень — wrapped у try/except.
+    """
+    try:
+        now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        text = (
+            f"❌ <b>ПОМИЛКА</b>\n"
+            f"📍 Контекст: {context}\n"
+            f"💬 {error}\n"
+            f"🕐 {now}"
+        )
+        await send_manager_notification(text)
+    except Exception as exc:
+        logger.exception(f"[TG] send_error_notification itself failed: {exc}")

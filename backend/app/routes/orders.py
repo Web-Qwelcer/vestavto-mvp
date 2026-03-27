@@ -1,9 +1,12 @@
 """
 VestAvto MVP - Orders Routes
 """
+import logging
 from typing import List, Optional
 from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -15,7 +18,7 @@ from app.schemas import (
     OrderStatusUpdate, UserInfo
 )
 from app.auth import get_current_user, get_current_manager
-from app.services.telegram_notify import send_manager_notification
+from app.services.telegram_notify import send_manager_notification, send_error_notification
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -30,7 +33,26 @@ async def create_order(
     """Створити замовлення (клієнт)"""
     if user.role != UserRole.CLIENT:
         raise HTTPException(status_code=403, detail="Only clients can create orders")
-    
+
+    try:
+        return await _create_order_inner(data, background_tasks, session, user)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(f"[Orders] Unexpected error creating order for user={user.id}: {exc}")
+        background_tasks.add_task(
+            _notify_order_error, exc,
+            f"Створення замовлення — клієнт #{user.id} ({user.full_name})"
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+async def _create_order_inner(
+    data: OrderCreate,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession,
+    user: UserInfo,
+) -> OrderResponse:
     # Збираємо товари
     product_ids = [item.product_id for item in data.items]
     result = await session.execute(
@@ -111,6 +133,14 @@ async def create_order(
     )
 
     return response
+
+
+async def _notify_order_error(exc: Exception, context: str) -> None:
+    """Надіслати сповіщення про помилку не ламаючи flow."""
+    try:
+        await send_error_notification(str(exc), context)
+    except Exception:
+        pass
 
 
 @router.get("", response_model=List[OrderResponse])
