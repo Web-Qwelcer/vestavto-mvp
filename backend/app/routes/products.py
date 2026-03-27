@@ -3,7 +3,7 @@ VestAvto MVP - Products Routes
 """
 import json
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
@@ -11,6 +11,7 @@ from app.database import get_session
 from app.models import Product, Category, CarModel
 from app.schemas import ProductCreate, ProductUpdate, ProductResponse, UserInfo
 from app.auth import get_current_user, get_current_manager
+from app.services.cloudinary_service import upload_image
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -159,6 +160,48 @@ async def delete_product(
     
     await session.delete(product)
     return {"ok": True}
+
+
+@router.post("/{product_id}/upload-image", response_model=ProductResponse)
+async def upload_product_image(
+    product_id: int,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    manager: UserInfo = Depends(get_current_manager),
+):
+    """Завантажити фото товару в Cloudinary (тільки менеджер)"""
+    result = await session.execute(select(Product).where(Product.id == product_id))
+    product = result.scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > 10 * 1024 * 1024:  # 10 MB
+        raise HTTPException(status_code=400, detail="Image too large (max 10 MB)")
+
+    try:
+        url = await upload_image(file_bytes, product_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {exc}")
+
+    # Додаємо URL на початок списку photos
+    existing: list = []
+    if product.photos:
+        try:
+            existing = json.loads(product.photos)
+        except Exception:
+            existing = []
+
+    existing.insert(0, url)
+    product.photos = json.dumps(existing)
+    await session.commit()
+
+    response = ProductResponse.model_validate(product)
+    response.photos = existing
+    return response
 
 
 @router.get("/categories/list")

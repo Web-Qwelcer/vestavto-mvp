@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api'
 import { useAuthStore } from '../../store/auth'
@@ -9,6 +9,9 @@ export default function AdminProductsPage() {
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
+  const [uploadingId, setUploadingId] = useState<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadTargetId = useRef<number | null>(null)
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -52,6 +55,32 @@ export default function AdminProductsPage() {
     mutationFn: (id: number) => api.delete(`/products/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-products'] })
   })
+
+  const handleUploadClick = (productId: number) => {
+    uploadTargetId.current = productId
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    const id = uploadTargetId.current
+    if (!file || !id) return
+    e.target.value = ''
+
+    setUploadingId(id)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      await api.post(`/products/${id}/upload-image`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] })
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || 'Помилка завантаження')
+    } finally {
+      setUploadingId(null)
+    }
+  }
 
   const resetForm = () => {
     setForm({ name: '', description: '', price: '', deposit: '', category: 'engine', car_model: 'superb_2_pre', photos: [], is_available: true })
@@ -164,17 +193,45 @@ export default function AdminProductsPage() {
         </div>
       )}
 
+      {/* Hidden file input for photo upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
       {isLoading ? (
         <div className="text-center py-8">Завантаження...</div>
       ) : (
         <div className="space-y-2">
           {products?.map((p: any) => (
-            <div key={p.id} className="card flex justify-between items-center">
-              <div>
-                <div className="font-medium">{p.name}</div>
-                <div className="text-sm text-gray-500">{p.price} ₴ • {p.is_available ? '✓ є' : '✗ немає'}</div>
+            <div key={p.id} className="card flex gap-3 items-center">
+              {/* Thumbnail */}
+              <div
+                className="w-14 h-14 rounded-lg bg-gray-100 flex-shrink-0 overflow-hidden cursor-pointer relative"
+                onClick={() => handleUploadClick(p.id)}
+                title="Натисни щоб завантажити фото"
+              >
+                {p.photos?.[0] ? (
+                  <img src={p.photos[0]} alt={p.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Фото</div>
+                )}
+                {uploadingId === p.id && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
               </div>
-              <div className="flex gap-2">
+
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm truncate">{p.name}</div>
+                <div className="text-xs text-gray-500">{p.price} ₴ • {p.is_available ? '✓ є' : '✗ немає'}</div>
+              </div>
+
+              <div className="flex gap-2 flex-shrink-0">
                 <button onClick={() => editProduct(p)} className="text-primary text-sm">
                   Ред.
                 </button>
