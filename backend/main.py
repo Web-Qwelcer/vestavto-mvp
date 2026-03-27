@@ -62,7 +62,9 @@ async def health():
 
 # ── TEMP DEBUG ───────────────────────────────────────────────────────────────
 import traceback as _traceback
+from fastapi import Depends as _Depends
 from sqlalchemy import select as _sel2, text as _text
+from app.database import get_session as _get_session
 
 @app.get("/api/products-debug")
 async def products_debug():
@@ -85,6 +87,38 @@ async def db_check():
             return {"db": row[0], "version": row[1][:50]}
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/api/products-pydantic-debug")
+async def products_pydantic_debug():
+    """Tests exact same code as get_products but with full error capture"""
+    from app.models import Product as _P, Category as _C, CarModel as _CM
+    from app.schemas import ProductResponse as _PR
+    import json as _json
+    try:
+        async with _session_maker() as session:
+            q = _sel2(_P).where(_P.is_available == True).limit(10)
+            result = await session.execute(q)
+            products = result.scalars().all()
+            response = []
+            for p in products:
+                try:
+                    data = _PR.model_validate(p)
+                    if p.photos:
+                        data.photos = _json.loads(p.photos)
+                    response.append({"id": p.id, "ok": True, "photos_raw": p.photos})
+                except Exception as e2:
+                    response.append({"id": p.id, "error": str(e2), "photos_raw": p.photos})
+            return {"count": len(products), "items": response}
+    except Exception as e:
+        return {"error": str(e), "trace": _traceback.format_exc()}
+
+@app.get("/api/session-dep-debug")
+async def session_dep_debug(session=_Depends(_get_session)):
+    """Tests get_session dependency specifically"""
+    from app.models import Product as _P2
+    result = await session.execute(_sel2(_P2).limit(1))
+    rows = result.scalars().all()
+    return {"ok": True, "count": len(rows)}
 # ── TEMP DEBUG END ────────────────────────────────────────────────────────────
 
 # ── TEMP SEED ────────────────────────────────────────────────────────────────
