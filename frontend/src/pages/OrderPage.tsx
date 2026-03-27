@@ -1,9 +1,24 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import api from '../api'
 
+const STATUS_LABELS: Record<string, string> = {
+  new:              'Нове',
+  pending_payment:  'Очікує оплати',
+  deposit_paid:     'Завдаток сплачено',
+  paid:             'Оплачено',
+  processing:       'В обробці',
+  shipped:          'Відправлено',
+  delivered:        'Доставлено',
+  cancelled:        'Скасовано',
+}
+
 export default function OrderPage() {
   const { id } = useParams()
+  const queryClient = useQueryClient()
+  const [paying, setPaying] = useState(false)
+  const [payError, setPayError] = useState<string | null>(null)
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['order', id],
@@ -22,8 +37,44 @@ export default function OrderPage() {
     enabled: !!order?.ttn_number
   })
 
+  const handlePay = async () => {
+    if (!order) return
+    setPaying(true)
+    setPayError(null)
+
+    try {
+      const res = await api.post('/payments/create', {
+        order_id: order.id,
+        payment_type: order.payment_type,
+      })
+
+      const { page_url } = res.data
+
+      // Відкриваємо посилання через Telegram WebApp або fallback
+      const tg = (window as any).Telegram?.WebApp
+      if (tg?.openLink) {
+        tg.openLink(page_url)
+      } else {
+        window.open(page_url, '_blank')
+      }
+
+      // Оновлюємо дані замовлення після переходу
+      await queryClient.invalidateQueries({ queryKey: ['order', id] })
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail
+      setPayError(detail || 'Помилка при створенні рахунку')
+    } finally {
+      setPaying(false)
+    }
+  }
+
   if (isLoading) return <div className="p-4 text-center">Завантаження...</div>
   if (!order) return <div className="p-4 text-center">Замовлення не знайдено</div>
+
+  const canPay = order.status === 'new' || order.status === 'pending_payment'
+  const isDeposit = order.payment_type === 'deposit'
+  const payAmount = isDeposit ? order.deposit_amount : (order.total_amount - order.paid_amount)
+  const payLabel = isDeposit ? 'Оплатити завдаток' : 'Оплатити повністю'
 
   return (
     <div className="p-4">
@@ -32,8 +83,24 @@ export default function OrderPage() {
       {/* Status */}
       <div className="card mb-4">
         <h3 className="text-sm text-gray-500 mb-1">Статус</h3>
-        <div className="font-medium">{order.status}</div>
+        <div className="font-medium">{STATUS_LABELS[order.status] ?? order.status}</div>
       </div>
+
+      {/* Pay button */}
+      {canPay && (
+        <div className="mb-4">
+          {payError && (
+            <div className="text-red-500 text-sm mb-2">{payError}</div>
+          )}
+          <button
+            className="btn-primary w-full"
+            onClick={handlePay}
+            disabled={paying}
+          >
+            {paying ? 'Зачекайте...' : `${payLabel} ${payAmount} ₴`}
+          </button>
+        </div>
+      )}
 
       {/* TTN tracking */}
       {order.ttn_number && (
