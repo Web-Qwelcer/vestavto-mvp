@@ -25,68 +25,77 @@ JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = 24 * 7  # 7 днів
 
-BOT_TOKEN = os.getenv("TELEGRAM_CLIENT_BOT_TOKEN", "")
-
 security = HTTPBearer(auto_error=False)
+
+
+def _check_init_data_with_token(
+    parsed: dict,
+    received_hash: str,
+    data_check_string: str,
+    bot_token: str,
+) -> bool:
+    """Перевіряє HMAC підпис initData для одного bot_token."""
+    if not bot_token:
+        return False
+    secret_key = hmac.new(
+        key=b"WebAppData",
+        msg=bot_token.encode(),
+        digestmod=hashlib.sha256,
+    ).digest()
+    calculated_hash = hmac.new(
+        key=secret_key,
+        msg=data_check_string.encode(),
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(calculated_hash, received_hash)
 
 
 def validate_init_data(init_data: str) -> Optional[TelegramUser]:
     """
-    Валідація Telegram WebApp initData через HMAC-SHA256
+    Валідація Telegram WebApp initData через HMAC-SHA256.
+    Перевіряє CLIENT і MANAGER bot токени — валідний будь-який.
     https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
     """
     try:
         parsed = parse_qs(init_data)
-        
-        # Отримуємо hash
+
         received_hash = parsed.get("hash", [None])[0]
         if not received_hash:
             return None
-        
-        # Формуємо data_check_string (всі параметри крім hash, відсортовані)
-        params = []
-        for key, values in parsed.items():
-            if key != "hash":
-                params.append(f"{key}={values[0]}")
+
+        params = [f"{k}={v[0]}" for k, v in parsed.items() if k != "hash"]
         params.sort()
         data_check_string = "\n".join(params)
-        
-        # Створюємо secret_key = HMAC-SHA256(bot_token, "WebAppData")
-        secret_key = hmac.new(
-            key=b"WebAppData",
-            msg=BOT_TOKEN.encode(),
-            digestmod=hashlib.sha256
-        ).digest()
-        
-        # Перевіряємо hash
-        calculated_hash = hmac.new(
-            key=secret_key,
-            msg=data_check_string.encode(),
-            digestmod=hashlib.sha256
-        ).hexdigest()
-        
-        if not hmac.compare_digest(calculated_hash, received_hash):
+
+        client_token  = os.getenv("TELEGRAM_CLIENT_BOT_TOKEN", "")
+        manager_token = os.getenv("TELEGRAM_MANAGER_BOT_TOKEN", "")
+
+        valid = (
+            _check_init_data_with_token(parsed, received_hash, data_check_string, client_token)
+            or
+            _check_init_data_with_token(parsed, received_hash, data_check_string, manager_token)
+        )
+        if not valid:
             return None
-        
+
         # Перевіряємо auth_date (не старіше 24 годин)
         auth_date = int(parsed.get("auth_date", [0])[0])
         if datetime.utcnow().timestamp() - auth_date > 86400:
             return None
-        
-        # Парсимо user
+
         user_data = parsed.get("user", [None])[0]
         if not user_data:
             return None
-        
+
         user_json = json.loads(unquote(user_data))
         return TelegramUser(
             id=user_json["id"],
             first_name=user_json.get("first_name", ""),
             last_name=user_json.get("last_name"),
             username=user_json.get("username"),
-            photo_url=user_json.get("photo_url")
+            photo_url=user_json.get("photo_url"),
         )
-        
+
     except Exception:
         return None
 
