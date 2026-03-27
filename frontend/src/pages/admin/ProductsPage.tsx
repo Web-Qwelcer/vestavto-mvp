@@ -7,13 +7,17 @@ import { Navigate } from 'react-router-dom'
 export default function AdminProductsPage() {
   const { isManager, isLoading: authLoading } = useAuthStore()
   const queryClient = useQueryClient()
+
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
   const [uploadingId, setUploadingId] = useState<number | null>(null)
   const [pendingPhotos, setPendingPhotos] = useState<File[]>([])
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const addPhotoInputRef = useRef<HTMLInputElement>(null)
   const uploadTargetId = useRef<number | null>(null)
+
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -25,7 +29,7 @@ export default function AdminProductsPage() {
     is_available: true,
   })
 
-  // ALL hooks must come before any conditional returns
+  // ALL hooks before conditional returns
   const { data: products, isLoading } = useQuery({
     queryKey: ['admin-products'],
     queryFn: async () => {
@@ -35,6 +39,12 @@ export default function AdminProductsPage() {
     enabled: isManager && !authLoading,
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/products/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-products'] }),
+  })
+
+  // Upload array of files to a product (sequentially)
   const uploadPhotos = async (productId: number, files: File[]) => {
     for (const file of files) {
       const formData = new FormData()
@@ -45,37 +55,41 @@ export default function AdminProductsPage() {
     }
   }
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
+  // Single-click atomic save: create/update → upload pending photos
+  const handleSave = async () => {
+    if (isSaving || !form.name || !form.price) {
+      if (!form.name) alert('Введіть назву товару')
+      else if (!form.price) alert('Введіть ціну')
+      return
+    }
+    setIsSaving(true)
+    try {
       const data = {
         ...form,
         price: parseFloat(form.price),
         deposit: parseFloat(form.deposit) || 0,
       }
-      if (editId) return api.put(`/products/${editId}`, data)
-      return api.post('/products', data)
-    },
-    onSuccess: async (res) => {
+      let productId: number
+      if (editId) {
+        await api.put(`/products/${editId}`, data)
+        productId = editId
+      } else {
+        const res = await api.post('/products', data)
+        productId = res.data.id
+      }
       if (pendingPhotos.length > 0) {
-        const productId = editId ?? res.data.id
-        setUploadingId(productId)
-        try {
-          await uploadPhotos(productId, pendingPhotos)
-        } finally {
-          setUploadingId(null)
-        }
+        await uploadPhotos(productId, pendingPhotos)
       }
       queryClient.invalidateQueries({ queryKey: ['admin-products'] })
       resetForm()
-    },
-  })
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || 'Помилка збереження')
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.delete(`/products/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-products'] }),
-  })
-
-  // Handlers
+  // Upload photos via thumbnail click (for existing products in list)
   const handleUploadClick = (productId: number) => {
     uploadTargetId.current = productId
     fileInputRef.current?.click()
@@ -127,7 +141,7 @@ export default function AdminProductsPage() {
       deposit: String(p.deposit ?? 0),
       category: p.category ?? 'engine',
       car_model: p.car_model ?? 'superb_2_pre',
-      photos: p.photos ?? [],
+      photos: Array.isArray(p.photos) ? p.photos : [],
       is_available: p.is_available ?? true,
     })
     setEditId(p.id)
@@ -135,22 +149,32 @@ export default function AdminProductsPage() {
     setPendingPhotos([])
   }
 
-  // Conditional returns AFTER all hooks
-  if (authLoading) return <div className="p-4 text-center text-gray-900">Завантаження...</div>
+  const removeExistingPhoto = (index: number) => {
+    setForm((prev) => ({ ...prev, photos: prev.photos.filter((_, i) => i !== index) }))
+  }
+
+  // Conditional returns after hooks
+  if (authLoading) return <div className="p-4 text-center text-ink">Завантаження...</div>
   if (!isManager) return <Navigate to="/" />
 
   return (
-    <div className="p-4 text-gray-900">
+    <div className="p-4 text-ink">
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-xl font-bold text-gray-900">Товари</h1>
-        <button onClick={() => { resetForm(); setShowForm(true) }} className="btn-primary">
+        <h1 className="text-xl font-bold text-ink">Товари</h1>
+        <button
+          onClick={() => {
+            resetForm()
+            setShowForm(true)
+          }}
+          className="btn-primary"
+        >
           + Додати
         </button>
       </div>
 
       {showForm && (
         <div className="card mb-4 bg-white">
-          <h2 className="font-semibold mb-3 text-gray-900">
+          <h2 className="font-semibold mb-3 text-ink">
             {editId ? 'Редагувати товар' : 'Новий товар'}
           </h2>
           <div className="space-y-3">
@@ -158,13 +182,13 @@ export default function AdminProductsPage() {
               placeholder="Назва *"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded bg-white text-gray-900 placeholder-gray-400"
+              className="w-full p-2 border border-gray-300 rounded bg-white text-ink placeholder-gray-400"
             />
             <textarea
               placeholder="Опис"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded bg-white text-gray-900 placeholder-gray-400"
+              className="w-full p-2 border border-gray-300 rounded bg-white text-ink placeholder-gray-400"
               rows={3}
             />
             <div className="grid grid-cols-2 gap-2">
@@ -173,21 +197,21 @@ export default function AdminProductsPage() {
                 placeholder="Ціна (грн) *"
                 value={form.price}
                 onChange={(e) => setForm({ ...form, price: e.target.value })}
-                className="p-2 border border-gray-300 rounded bg-white text-gray-900 placeholder-gray-400"
+                className="p-2 border border-gray-300 rounded bg-white text-ink placeholder-gray-400"
               />
               <input
                 type="number"
                 placeholder="Завдаток (грн)"
                 value={form.deposit}
                 onChange={(e) => setForm({ ...form, deposit: e.target.value })}
-                className="p-2 border border-gray-300 rounded bg-white text-gray-900 placeholder-gray-400"
+                className="p-2 border border-gray-300 rounded bg-white text-ink placeholder-gray-400"
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <select
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
-                className="p-2 border border-gray-300 rounded bg-white text-gray-900"
+                className="p-2 border border-gray-300 rounded bg-white text-ink"
               >
                 <option value="engine">Двигун</option>
                 <option value="transmission">Трансмісія</option>
@@ -200,7 +224,7 @@ export default function AdminProductsPage() {
               <select
                 value={form.car_model}
                 onChange={(e) => setForm({ ...form, car_model: e.target.value })}
-                className="p-2 border border-gray-300 rounded bg-white text-gray-900"
+                className="p-2 border border-gray-300 rounded bg-white text-ink"
               >
                 <option value="superb_2_pre">Superb 2 дорест</option>
                 <option value="superb_2_rest">Superb 2 рест</option>
@@ -211,7 +235,7 @@ export default function AdminProductsPage() {
                 <option value="other">Інше</option>
               </select>
             </div>
-            <label className="flex items-center gap-2 text-gray-900">
+            <label className="flex items-center gap-2 text-ink cursor-pointer">
               <input
                 type="checkbox"
                 checked={form.is_available}
@@ -224,26 +248,34 @@ export default function AdminProductsPage() {
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">Фото</p>
               <div className="flex flex-wrap gap-2">
-                {/* Existing photos (edit mode) */}
+                {/* Existing photos with ✕ delete */}
                 {form.photos.map((url, i) => (
                   <div key={`ex-${i}`} className="relative w-16 h-16">
                     <img src={url} alt="" className="w-full h-full object-cover rounded-lg" />
+                    <button
+                      type="button"
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center leading-none shadow"
+                      onClick={() => removeExistingPhoto(i)}
+                      title="Видалити фото"
+                    >
+                      ✕
+                    </button>
                   </div>
                 ))}
-                {/* Newly selected photos */}
+                {/* Newly selected (pending) photos with ✕ */}
                 {pendingPhotos.map((file, i) => (
                   <div key={`new-${i}`} className="relative w-16 h-16">
                     <img
                       src={URL.createObjectURL(file)}
                       alt=""
-                      className="w-full h-full object-cover rounded-lg"
+                      className="w-full h-full object-cover rounded-lg opacity-80"
                     />
                     <button
                       type="button"
-                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center leading-none"
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center leading-none shadow"
                       onClick={() => setPendingPhotos((prev) => prev.filter((_, idx) => idx !== i))}
                     >
-                      ×
+                      ✕
                     </button>
                   </div>
                 ))}
@@ -266,22 +298,27 @@ export default function AdminProductsPage() {
               />
               {pendingPhotos.length > 0 && (
                 <p className="text-xs text-gray-500 mt-1">
-                  {pendingPhotos.length} фото обрано — завантажаться після збереження
+                  + {pendingPhotos.length} нових фото — завантажаться автоматично
                 </p>
               )}
             </div>
 
             <div className="flex gap-2">
               <button
-                onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending}
+                onClick={handleSave}
+                disabled={isSaving}
                 className="btn-primary flex-1 disabled:opacity-60"
               >
-                {saveMutation.isPending ? 'Збереження...' : 'Зберегти'}
+                {isSaving
+                  ? pendingPhotos.length > 0
+                    ? 'Завантаження фото...'
+                    : 'Збереження...'
+                  : 'Зберегти'}
               </button>
               <button
                 onClick={resetForm}
-                className="px-4 py-2 border border-gray-300 rounded text-gray-700 bg-white"
+                disabled={isSaving}
+                className="px-4 py-2 border border-gray-300 rounded text-ink bg-white disabled:opacity-50"
               >
                 Скасувати
               </button>
@@ -290,7 +327,7 @@ export default function AdminProductsPage() {
         </div>
       )}
 
-      {/* Hidden file input for thumbnail-click upload */}
+      {/* Hidden file input for list-item thumbnail click */}
       <input
         ref={fileInputRef}
         type="file"
@@ -301,11 +338,11 @@ export default function AdminProductsPage() {
       />
 
       {isLoading ? (
-        <div className="text-center py-8 text-gray-700">Завантаження...</div>
+        <div className="text-center py-8 text-gray-500">Завантаження...</div>
       ) : (
         <div className="space-y-2">
           {(!products || products.length === 0) && (
-            <p className="text-center text-gray-500 py-8">Товарів немає</p>
+            <p className="text-center text-gray-500 py-8">Товарів немає. Додайте перший!</p>
           )}
           {products?.map((p: any) => (
             <div key={p.id} className="card flex gap-3 items-center bg-white">
@@ -330,18 +367,17 @@ export default function AdminProductsPage() {
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm truncate text-gray-900">{p.name}</div>
+                <div className="font-medium text-sm truncate text-ink">{p.name}</div>
                 <div className="text-xs text-gray-500">
-                  {p.price} ₴{p.deposit ? ` • завдаток ${p.deposit} ₴` : ''} •{' '}
-                  {p.is_available ? '✓ є' : '✗ немає'}
+                  {p.price} ₴{p.deposit ? ` • завд. ${p.deposit} ₴` : ''} •{' '}
+                  <span className={p.is_available ? 'text-green-600' : 'text-red-500'}>
+                    {p.is_available ? '✓ є' : '✗ немає'}
+                  </span>
                 </div>
               </div>
 
               <div className="flex gap-3 flex-shrink-0">
-                <button
-                  onClick={() => editProduct(p)}
-                  className="text-blue-600 text-sm font-medium"
-                >
+                <button onClick={() => editProduct(p)} className="text-blue-600 text-sm font-medium">
                   Ред.
                 </button>
                 <button

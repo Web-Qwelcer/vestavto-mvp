@@ -65,20 +65,20 @@ export default function HomePage() {
     <div className="p-4">
       {/* Filters */}
       <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-        <select 
+        <select
           value={category}
           onChange={(e) => setFilter('category', e.target.value)}
-          className="px-3 py-2 rounded-lg border bg-white text-sm"
+          className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-ink text-sm flex-shrink-0"
         >
           {categories.map(c => (
             <option key={c.value} value={c.value}>{c.label}</option>
           ))}
         </select>
-        
+
         <select
           value={car}
           onChange={(e) => setFilter('car', e.target.value)}
-          className="px-3 py-2 rounded-lg border bg-white text-sm"
+          className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-ink text-sm flex-shrink-0"
         >
           {cars.map(c => (
             <option key={c.value} value={c.value}>{c.label}</option>
