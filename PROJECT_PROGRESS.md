@@ -352,3 +352,89 @@ colors: { ink: '#1a1a2e' }
 | Видалення існуючих фото | ✅ Fixed | `9f723b2` |
 | Atomic save (create + upload) | ✅ Fixed | `9f723b2` |
 | Monobank webhook signature | ❌ TODO | — |
+
+---
+
+## Бізнес-рішення (з планування)
+
+| Рішення | Деталі |
+|---------|--------|
+| Завдаток | Сумується по кожному товару в кошику |
+| Timeout 30 хв | Сповіщення менеджеру, НЕ авто-скасування |
+| 2 замовлення від 1 клієнта | Об'єднувати в одну ТТН (TODO) |
+| Зворотній зв'язок | Кнопка → прямий чат з менеджером в Telegram |
+
+---
+
+## TODO — План реалізації
+
+### 1. Сповіщення клієнту в Telegram (Пріоритет: ВИСОКИЙ)
+
+**Що:**
+- Після оплати: "✅ Оплату отримано! Очікуйте відправлення."
+- Після ТТН: "🚚 Замовлення відправлено. ТТН: {номер}. Відстежити: {link}"
+
+**Як:**
+1. Створити `services/telegram_client_notify.py` (аналог telegram_notify.py, але CLIENT_BOT_TOKEN)
+2. В `payments.py` webhook після успішної оплати → `notify_client(telegram_id, message)`
+3. В `novaposhta.py` після створення ТТН → `notify_client(telegram_id, message)`
+4. Client.telegram_id вже є в моделі
+
+**Файли:** `services/telegram_client_notify.py`, `routes/payments.py`, `services/novaposhta.py`
+
+---
+
+### 2. Timeout 30 хвилин (Пріоритет: ВИСОКИЙ)
+
+**Що:**
+- Замовлення `new` або `pending_payment` більше 30 хв
+- Менеджер отримує: "⚠️ Замовлення #{id} не оплачено 30+ хв. Клієнт: {name}, {phone}"
+- НЕ скасовувати автоматично
+
+**Як (Варіант — Background task):**
+1. При створенні замовлення → `background_tasks.add_task(check_payment_timeout, order.id)`
+2. `check_payment_timeout`: sleep 30 хв → перевірити статус → якщо ще не оплачено → notify_manager
+3. Або: endpoint `GET /orders/check-timeouts` для виклику через Render Cron Job кожні 10 хв
+
+**Файли:** `routes/orders.py` або `services/timeout_checker.py`
+
+---
+
+### 3. Кнопка "Запитати про товар" (Пріоритет: СЕРЕДНІЙ)
+
+**Що:**
+- На ProductPage кнопка "💬 Запитати про товар"
+- Відкриває прямий чат з менеджером в Telegram
+- Готовий текст: "Питання по товару: {назва} (ID: {id})"
+
+**Як:**
+1. В ProductPage додати кнопку біля "Додати в кошик"
+2. onClick: `Telegram.WebApp.openTelegramLink('https://t.me/{MANAGER_USERNAME}?text=...')`
+3. Додати env var `VITE_MANAGER_USERNAME` у Vercel (наприклад: `ivan_vestavto`)
+
+**Файли:** `frontend/src/pages/ProductPage.tsx`, Vercel env vars
+
+---
+
+### 4. Косметика кольорів (Пріоритет: НИЗЬКИЙ)
+
+- Замінити залишки #000000 на #1a1a2e (ink)
+- Перевірити консистентність: HomePage, ProductPage, OrdersPage, Admin pages
+
+---
+
+### 5. Git cleanup перед передачею (Пріоритет: ПЕРЕД РЕЛІЗОМ)
+
+- Видалити co-author Claude з комітів (git filter-branch або BFG)
+- Перевірити що немає секретів в історії
+- Squash commits якщо потрібно
+
+---
+
+## Порядок виконання
+
+1. ✅ Спочатку: Сповіщення клієнту (швидка перемога, критично для UX)
+2. ✅ Потім: Timeout 30 хв (важливо для бізнесу)
+3. ✅ Далі: Кнопка "Запитати" (1 файл, 10 хв роботи)
+4. 🔄 Косметика (можна паралельно)
+5. 🔄 Git cleanup (перед релізом)
