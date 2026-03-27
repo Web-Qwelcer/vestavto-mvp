@@ -6,9 +6,10 @@ import { useAuthStore } from '../../store/auth'
 const statuses = ['new', 'pending_payment', 'deposit_paid', 'paid', 'processing', 'shipped', 'delivered', 'cancelled']
 
 export default function AdminOrdersPage() {
-  const { isManager } = useAuthStore()
+  const { isManager, isLoading: authLoading } = useAuthStore()
   const queryClient = useQueryClient()
 
+  if (authLoading) return <div className="p-4 text-center text-gray-700">Завантаження...</div>
   if (!isManager) return <Navigate to="/" />
 
   const { data: orders, isLoading } = useQuery({

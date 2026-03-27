@@ -41,7 +41,7 @@ export default function HomePage() {
   
   const addItem = useCartStore(s => s.addItem)
 
-  const { data: products, isLoading } = useQuery({
+  const { data: products, isLoading, isError } = useQuery({
     queryKey: ['products', category, car],
     queryFn: async () => {
       const res = await api.get('/products', { 
@@ -89,6 +89,8 @@ export default function HomePage() {
       {/* Products */}
       {isLoading ? (
         <div className="text-center py-8 text-gray-500">Завантаження...</div>
+      ) : isError ? (
+        <div className="text-center py-8 text-gray-500">Не вдалося завантажити товари</div>
       ) : products?.length === 0 ? (
         <div className="text-center py-8 text-gray-500">Товарів не знайдено</div>
       ) : (

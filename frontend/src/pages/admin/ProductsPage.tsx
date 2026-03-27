@@ -23,8 +23,8 @@ export default function AdminProductsPage() {
     is_available: true
   })
 
-  // Якщо є токен але ще йде завантаження — чекаємо (не редіректимо передчасно)
-  if (token && authLoading) return <div className="p-4 text-center">Завантаження...</div>
+  // Чекаємо поки авторизація завершиться — не редіректимо передчасно
+  if (authLoading) return <div className="p-4 text-center text-gray-700">Завантаження...</div>
   if (!isManager) return <Navigate to="/" />
 
   const { data: products, isLoading } = useQuery({
@@ -122,13 +122,13 @@ export default function AdminProductsPage() {
               placeholder="Назва"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border rounded bg-white text-gray-900"
             />
             <textarea
               placeholder="Опис"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border rounded bg-white text-gray-900"
               rows={3}
             />
             <div className="grid grid-cols-2 gap-2">
@@ -137,21 +137,21 @@ export default function AdminProductsPage() {
                 placeholder="Ціна"
                 value={form.price}
                 onChange={(e) => setForm({ ...form, price: e.target.value })}
-                className="p-2 border rounded"
+                className="p-2 border rounded bg-white text-gray-900"
               />
               <input
                 type="number"
                 placeholder="Завдаток"
                 value={form.deposit}
                 onChange={(e) => setForm({ ...form, deposit: e.target.value })}
-                className="p-2 border rounded"
+                className="p-2 border rounded bg-white text-gray-900"
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <select
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
-                className="p-2 border rounded"
+                className="p-2 border rounded bg-white text-gray-900"
               >
                 <option value="engine">Двигун</option>
                 <option value="transmission">Трансмісія</option>
@@ -164,7 +164,7 @@ export default function AdminProductsPage() {
               <select
                 value={form.car_model}
                 onChange={(e) => setForm({ ...form, car_model: e.target.value })}
-                className="p-2 border rounded"
+                className="p-2 border rounded bg-white text-gray-900"
               >
                 <option value="superb_2_pre">Superb 2 дорест</option>
                 <option value="superb_2_rest">Superb 2 рест</option>
