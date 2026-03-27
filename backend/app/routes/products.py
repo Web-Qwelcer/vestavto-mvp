@@ -42,18 +42,7 @@ async def get_products(
     result = await session.execute(query)
     products = result.scalars().all()
     
-    # Конвертуємо photos з JSON
-    response = []
-    for p in products:
-        data = ProductResponse.model_validate(p)
-        if p.photos:
-            try:
-                data.photos = json.loads(p.photos)
-            except:
-                data.photos = []
-        response.append(data)
-    
-    return response
+    return [ProductResponse.model_validate(p) for p in products]
 
 
 @router.get("/{product_id}", response_model=ProductResponse)
@@ -70,14 +59,7 @@ async def get_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    data = ProductResponse.model_validate(product)
-    if product.photos:
-        try:
-            data.photos = json.loads(product.photos)
-        except:
-            data.photos = []
-    
-    return data
+    return ProductResponse.model_validate(product)
 
 
 @router.post("", response_model=ProductResponse)
@@ -131,14 +113,7 @@ async def update_product(
     
     await session.flush()
     
-    response = ProductResponse.model_validate(product)
-    if product.photos:
-        try:
-            response.photos = json.loads(product.photos)
-        except:
-            response.photos = []
-    
-    return response
+    return ProductResponse.model_validate(product)
 
 
 @router.delete("/{product_id}")
@@ -198,9 +173,7 @@ async def upload_product_image(
     product.photos = json.dumps(existing)
     await session.commit()
 
-    response = ProductResponse.model_validate(product)
-    response.photos = existing
-    return response
+    return ProductResponse.model_validate(product)
 
 
 @router.get("/categories/list")

@@ -1,9 +1,10 @@
 """
 VestAvto MVP - Pydantic Schemas
 """
+import json
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.models import OrderStatus, PaymentType, UserRole, CarModel, Category
 
 
@@ -65,7 +66,18 @@ class ProductResponse(ProductBase):
     id: int
     created_at: datetime
     updated_at: datetime
-    
+
+    @field_validator('photos', mode='before')
+    @classmethod
+    def parse_photos_json(cls, v):
+        """DB stores photos as JSON string — parse it automatically."""
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return []
+        return v
+
     class Config:
         from_attributes = True
 
