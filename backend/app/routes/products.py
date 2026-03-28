@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from app.database import get_session
-from app.models import Product, Category, CarModel, OrderItem
+from app.models import Product, Category, CarModel, OrderItem, Order, OrderStatus
 from app.schemas import ProductCreate, ProductUpdate, ProductResponse, UserInfo
 from app.auth import get_current_user, get_current_manager
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -131,14 +131,25 @@ async def delete_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    # Перевіряємо чи товар є в замовленнях
+    # Блокуємо видалення тільки якщо товар є в АКТИВНИХ замовленнях.
+    # Скасовані (cancelled) та доставлені (delivered) — не перешкода.
+    active_statuses = [
+        s for s in OrderStatus
+        if s not in (OrderStatus.CANCELLED, OrderStatus.DELIVERED)
+    ]
     linked = await session.execute(
-        select(OrderItem).where(OrderItem.product_id == product_id).limit(1)
+        select(OrderItem)
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(
+            OrderItem.product_id == product_id,
+            Order.status.in_(active_statuses),
+        )
+        .limit(1)
     )
     if linked.scalar_one_or_none():
         raise HTTPException(
             status_code=409,
-            detail="Неможливо видалити товар — він є в замовленнях"
+            detail="Неможливо видалити товар — він є в активних замовленнях"
         )
 
     await session.delete(product)
