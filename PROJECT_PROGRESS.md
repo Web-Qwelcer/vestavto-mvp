@@ -352,6 +352,10 @@ colors: { ink: '#1a1a2e' }
 | Видалення існуючих фото | ✅ Fixed | `9f723b2` |
 | Atomic save (create + upload) | ✅ Fixed | `9f723b2` |
 | Monobank webhook signature | ❌ TODO | — |
+| "Order not found" race condition (checkout) | ✅ Fixed | `ffe95f6` |
+| Кошик не очищається після замовлення | ✅ Fixed | `ffe95f6` |
+| Видалення товару з скасованих замовлень | ✅ Fixed | `ef80649` |
+| Курсор (caret) не видно в інпутах | ✅ Fixed | `b87c3aa` |
 
 ---
 
@@ -416,10 +420,12 @@ colors: { ink: '#1a1a2e' }
 
 ---
 
-### 4. Косметика кольорів (Пріоритет: НИЗЬКИЙ)
+### ~~4. UI Polish~~ ✅ DONE (`3b7e691`, `b87c3aa`)
 
-- Замінити залишки #000000 на #1a1a2e (ink)
-- Перевірити консистентність: HomePage, ProductPage, OrdersPage, Admin pages
+- btn-primary: rounded-xl
+- HomePage: SVG photo placeholder, flex-col cards, rounded-xl
+- ProductPage: info card (shadow-sm rounded-xl), price text-3xl, human labels для category/car, pill badges
+- index.css: input/textarea/select — `color: #1a1a2e`, `caret-color: #3b82f6`
 
 ---
 
@@ -436,5 +442,5 @@ colors: { ink: '#1a1a2e' }
 1. ✅ ~~Сповіщення клієнту~~ — DONE (`149c4ca`)
 2. ✅ ~~Timeout 30 хв~~ — DONE
 3. ✅ ~~Кнопка "Запитати"~~ — DONE
-4. 🔄 Косметика (можна паралельно)
+4. ✅ ~~UI Polish~~ — DONE (`3b7e691`, `b87c3aa`)
 5. 🔄 Git cleanup (перед релізом)
