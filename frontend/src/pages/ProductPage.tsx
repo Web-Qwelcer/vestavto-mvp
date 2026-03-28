@@ -48,8 +48,21 @@ export default function ProductPage() {
     navigate('/cart')
   }
 
+  const handleAskQuestion = () => {
+    const managerUsername = import.meta.env.VITE_MANAGER_USERNAME
+    if (!managerUsername) return
+    const text = encodeURIComponent(`Питання по товару: ${product.name} (ID: ${product.id})`)
+    const url = `https://t.me/${managerUsername}?text=${text}`
+    const tg = window.Telegram?.WebApp
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(url)
+    } else {
+      window.open(url, '_blank')
+    }
+  }
+
   return (
-    <div className="pb-24">
+    <div className="pb-36">
       {/* Photo carousel */}
       <div
         className="aspect-square bg-gray-100 relative overflow-hidden select-none"
@@ -141,11 +154,19 @@ export default function ProductPage() {
         </div>
       </div>
 
-      {/* Fixed bottom button */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100">
+      {/* Fixed bottom buttons */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 space-y-2">
         <button onClick={handleAddToCart} className="btn-primary w-full py-3">
           Додати в кошик
         </button>
+        {import.meta.env.VITE_MANAGER_USERNAME && (
+          <button
+            onClick={handleAskQuestion}
+            className="w-full py-3 rounded-lg font-medium border border-gray-300 bg-white text-ink hover:bg-gray-50 transition-colors"
+          >
+            💬 Запитати про товар
+          </button>
+        )}
       </div>
     </div>
   )
