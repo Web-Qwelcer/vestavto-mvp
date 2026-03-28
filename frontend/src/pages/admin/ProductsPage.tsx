@@ -42,6 +42,9 @@ export default function AdminProductsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.delete(`/products/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-products'] }),
+    onError: (err: any) => {
+      alert(err?.response?.data?.detail || 'Помилка видалення товару')
+    },
   })
 
   // Upload array of files to a product (sequentially)

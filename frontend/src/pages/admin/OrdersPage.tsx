@@ -43,11 +43,17 @@ export default function AdminOrdersPage() {
     mutationFn: ({ id, status }: { id: number; status: string }) =>
       api.patch(`/orders/${id}/status`, { status }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-orders'] }),
+    onError: (err: any) => {
+      alert(err?.response?.data?.detail || 'Помилка оновлення статусу')
+    },
   })
 
   const createTTN = useMutation({
     mutationFn: (id: number) => api.post(`/delivery/${id}/create-ttn`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-orders'] }),
+    onError: (err: any) => {
+      alert(err?.response?.data?.detail || 'Помилка створення ТТН')
+    },
   })
 
   // Conditional returns after hooks
