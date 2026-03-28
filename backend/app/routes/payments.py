@@ -7,11 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_session
-from app.models import Order, Payment, OrderStatus, PaymentType
+from app.models import Order, Payment, OrderStatus, PaymentType, Client
 from app.schemas import PaymentCreate, PaymentResponse, MonobankWebhook, UserInfo
 from app.auth import get_current_user, get_current_manager
 from app.services import monobank, novaposhta
 from app.services.telegram_notify import send_manager_notification, send_error_notification
+from app.services.telegram_client_notify import send_client_notification
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,18 @@ async def monobank_webhook(
 
             await session.commit()
 
+            # Сповіщення клієнту — отримуємо telegram_id поки сесія відкрита
+            client_result = await session.execute(
+                select(Client).where(Client.id == order.client_id)
+            )
+            client = client_result.scalar_one_or_none()
+            if client:
+                background_tasks.add_task(
+                    send_client_notification,
+                    client.telegram_id,
+                    f"✅ Оплату отримано! Очікуйте відправлення."
+                )
+
             background_tasks.add_task(
                 send_manager_notification,
                 f"✅ Замовлення #{order.id} оплачено\n"
@@ -248,10 +261,23 @@ async def create_ttn_for_order(order_id: int):
                 order.status     = OrderStatus.PROCESSING
                 await session.commit()
                 logger.info(f"[TTN BG] TTN created: {ttn['ttn_number']} for order={order_id}")
+
+                # Сповіщення менеджеру
                 await send_manager_notification(
                     f"🚚 ТТН створено: {ttn['ttn_number']}\n"
                     f"Замовлення #{order_id}"
                 )
+
+                # Сповіщення клієнту
+                client_result = await session.execute(
+                    select(Client).where(Client.id == order.client_id)
+                )
+                client = client_result.scalar_one_or_none()
+                if client:
+                    await send_client_notification(
+                        client.telegram_id,
+                        f"🚚 Замовлення відправлено. ТТН: {ttn['ttn_number']}"
+                    )
             else:
                 msg = (
                     f"Nova Poshta повернула None для замовлення #{order_id}. "
