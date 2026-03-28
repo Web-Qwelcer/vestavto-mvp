@@ -4,6 +4,26 @@ import { useParams, useNavigate } from 'react-router-dom'
 import api from '../api'
 import { useCartStore } from '../store/cart'
 
+const CATEGORY_LABELS: Record<string, string> = {
+  engine: 'Двигун і навісне',
+  transmission: 'Трансмісія',
+  suspension: 'Ходова частина',
+  body: 'Кузов і оптика',
+  interior: 'Салон',
+  electrical: 'Електрика',
+  other: 'Інше',
+}
+
+const CAR_LABELS: Record<string, string> = {
+  superb_2_pre: 'Superb 2 дорест',
+  superb_2_rest: 'Superb 2 рест',
+  passat_b7: 'Passat B7',
+  cc: 'VW CC',
+  touareg: 'Touareg',
+  tiguan: 'Tiguan',
+  other: 'Інше',
+}
+
 export default function ProductPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -61,6 +81,9 @@ export default function ProductPage() {
     }
   }
 
+  const categoryLabel = CATEGORY_LABELS[product.category] ?? product.category
+  const carLabel = CAR_LABELS[product.car_model] ?? product.car_model
+
   return (
     <div className="pb-36">
       {/* Photo carousel */}
@@ -78,8 +101,15 @@ export default function ProductPage() {
             draggable={false}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-gray-400">
-            Фото відсутнє
+          <div className="w-full h-full flex flex-col items-center justify-center text-gray-300">
+            <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
           </div>
         )}
 
@@ -124,33 +154,33 @@ export default function ProductPage() {
         )}
       </div>
 
-      {/* Info */}
-      <div className="p-4">
-        <h1 className="text-xl font-bold mb-2 text-ink">{product.name}</h1>
+      {/* Info card */}
+      <div className="mx-4 mt-4 mb-3 bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <h1 className="text-xl font-bold mb-3 text-ink leading-snug">{product.name}</h1>
 
+        {/* Price */}
         <div className="flex items-baseline gap-3 mb-4">
-          <span className="text-2xl font-bold text-primary">{product.price} ₴</span>
+          <span className="text-3xl font-bold text-primary">{product.price} ₴</span>
           {product.deposit > 0 && (
-            <span className="text-sm text-gray-500">завдаток {product.deposit} ₴</span>
+            <span className="text-sm text-gray-400">завдаток {product.deposit} ₴</span>
           )}
         </div>
 
+        {/* Description */}
         {product.description && (
           <div className="mb-4">
-            <h3 className="font-medium mb-1 text-ink">Опис</h3>
-            <p className="text-gray-600 text-sm leading-relaxed">{product.description}</p>
+            <p className="text-gray-500 text-sm leading-relaxed">{product.description}</p>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="bg-gray-50 p-2 rounded">
-            <span className="text-gray-500">Категорія:</span>
-            <div className="font-medium text-ink">{product.category}</div>
-          </div>
-          <div className="bg-gray-50 p-2 rounded">
-            <span className="text-gray-500">Авто:</span>
-            <div className="font-medium text-ink">{product.car_model}</div>
-          </div>
+        {/* Meta tags */}
+        <div className="flex flex-wrap gap-2">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+            {categoryLabel}
+          </span>
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+            {carLabel}
+          </span>
         </div>
       </div>
 
@@ -162,7 +192,7 @@ export default function ProductPage() {
         {import.meta.env.VITE_MANAGER_USERNAME && (
           <button
             onClick={handleAskQuestion}
-            className="w-full py-3 rounded-lg font-medium border border-gray-300 bg-white text-ink hover:bg-gray-50 transition-colors"
+            className="w-full py-3 rounded-xl font-medium border border-gray-300 bg-white text-ink hover:bg-gray-50 transition-colors"
           >
             💬 Запитати про товар
           </button>
