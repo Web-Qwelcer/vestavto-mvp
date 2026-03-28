@@ -112,11 +112,16 @@ async def _create_order_inner(
     
     session.add(order)
     await session.flush()
-    
+
     # Позначаємо товари як недоступні
     for item in data.items:
         product = products[item.product_id]
         product.is_available = False
+
+    # Явний commit ДО повернення відповіді.
+    # get_session робить commit у cleanup-фазі — після відправки response.
+    # Якщо frontend одразу шле POST /payments/create, order ще не в БД → 404.
+    await session.commit()
 
     response = await _order_to_response(order, products)
 

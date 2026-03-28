@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import { useCartStore } from '../store/cart'
 
 export default function CheckoutPage() {
   const { items, total, depositTotal, clearCart } = useCartStore()
-  
+  const navigate = useNavigate()
+
   const [form, setForm] = useState({
     recipient_name: '',
     recipient_phone: '',
@@ -61,12 +63,14 @@ export default function CheckoutPage() {
       return res.data
     },
     onSuccess: async (order) => {
+      // Очищаємо кошик одразу — замовлення створено, товари зарезервовано.
+      // Не чекаємо на payment, щоб cart точно очистився навіть якщо payment упаде.
+      clearCart()
       try {
         const payRes = await api.post('/payments/create', {
           order_id: order.id,
           payment_type: form.payment_type
         })
-        clearCart()
         const pageUrl = payRes.data.page_url
         const tg = window.Telegram?.WebApp
         if (tg?.openLink) {
@@ -74,8 +78,12 @@ export default function CheckoutPage() {
         } else {
           window.open(pageUrl, '_blank')
         }
+        // Переходимо на сторінку замовлення після відкриття payment URL
+        navigate(`/order/${order.id}`)
       } catch (err: any) {
         setErrorMsg(err?.response?.data?.detail || 'Помилка створення платежу')
+        // Навіть при помилці payment — переходимо на замовлення (можна оплатити потім)
+        navigate(`/order/${order.id}`)
       }
     },
     onError: (err: any) => {
