@@ -1,6 +1,7 @@
 """
 VestAvto MVP - Orders Routes
 """
+import asyncio
 import logging
 from typing import List, Optional
 from datetime import datetime
@@ -137,7 +138,43 @@ async def _create_order_inner(
         f"💰 {total:.0f} грн"
     )
 
+    background_tasks.add_task(check_payment_timeout, order.id)
+
     return response
+
+
+async def check_payment_timeout(order_id: int) -> None:
+    """
+    Фонова задача: якщо замовлення не оплачено через 30 хв — сповістити менеджера.
+    НЕ скасовує замовлення автоматично.
+    """
+    await asyncio.sleep(30 * 60)  # 30 хвилин
+
+    from app.database import async_session_maker
+
+    try:
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Order).where(Order.id == order_id)
+            )
+            order = result.scalar_one_or_none()
+
+            if not order:
+                logger.warning(f"[Timeout] Order {order_id} not found")
+                return
+
+            if order.status in (OrderStatus.NEW, OrderStatus.PENDING_PAYMENT):
+                logger.info(f"[Timeout] Order {order_id} unpaid after 30 min, notifying manager")
+                await send_manager_notification(
+                    f"⚠️ Замовлення #{order_id} не оплачено 30+ хв\n"
+                    f"👤 {order.recipient_name}, {order.recipient_phone}"
+                )
+            else:
+                logger.info(
+                    f"[Timeout] Order {order_id} already in status={order.status.value}, skipping"
+                )
+    except Exception as exc:
+        logger.exception(f"[Timeout] Error checking order {order_id}: {exc}")
 
 
 async def _notify_order_error(exc: Exception, context: str) -> None:
