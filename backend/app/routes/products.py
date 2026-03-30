@@ -182,7 +182,7 @@ async def upload_product_image(
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=f"Upload failed: {exc}")
 
-    # Додаємо URL на початок списку photos
+    # Додаємо URL в кінець списку photos (зберігаємо порядок вибору)
     existing: list = []
     if product.photos:
         try:
@@ -190,7 +190,7 @@ async def upload_product_image(
         except Exception:
             existing = []
 
-    existing.insert(0, url)
+    existing.append(url)
     product.photos = json.dumps(existing)
     await session.commit()
 
