@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link, Navigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import api from '../../api'
 import { useAuthStore } from '../../store/auth'
 
@@ -93,11 +93,8 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="p-4 text-ink">
-      <div className="flex justify-between items-center mb-4">
+      <div className="mb-4">
         <h1 className="text-xl font-bold text-ink">Замовлення</h1>
-        <Link to="/admin/products" className="text-primary text-sm font-medium">
-          Товари →
-        </Link>
       </div>
 
       {isLoading ? (
