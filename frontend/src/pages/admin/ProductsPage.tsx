@@ -172,13 +172,23 @@ export default function AdminProductsPage() {
     try {
       const res = await api.get('/products/export', { responseType: 'blob' })
       const url = URL.createObjectURL(res.data)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'products.xlsx'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+
+      // iOS Safari ignores <a download> for blob URLs — open in new tab instead.
+      // On desktop/Android the standard anchor click works fine.
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+      if (isIOS) {
+        window.open(url, '_blank')
+        // Delay revoke so Safari has time to read the blob
+        setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      } else {
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'products.xlsx'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }
     } catch {
       alert('Помилка експорту')
     } finally {

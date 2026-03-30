@@ -1,3 +1,4 @@
+import { useState, useRef, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import api from '../api'
@@ -6,6 +7,7 @@ import { useCartStore } from '../store/cart'
 interface Product {
   id: number
   name: string
+  description?: string
   price: number
   deposit: number
   category: string
@@ -54,6 +56,10 @@ export default function HomePage() {
   const category = params.get('category') || ''
   const car = params.get('car') || ''
 
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
   const addItem = useCartStore((s) => s.addItem)
 
   const { data: products, isLoading, isError } = useQuery({
@@ -66,6 +72,17 @@ export default function HomePage() {
     },
   })
 
+  const filteredProducts = useMemo(() => {
+    if (!products) return []
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return products
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.description ?? '').toLowerCase().includes(q)
+    )
+  }, [products, searchQuery])
+
   const setFilter = (key: string, value: string) => {
     const newParams = new URLSearchParams(params)
     if (value) {
@@ -76,45 +93,93 @@ export default function HomePage() {
     setParams(newParams)
   }
 
+  const openSearch = () => {
+    setShowSearch(true)
+    // Focus after render
+    requestAnimationFrame(() => searchInputRef.current?.focus())
+  }
+
+  const closeSearch = () => {
+    setShowSearch(false)
+    setSearchQuery('')
+  }
+
   return (
     <div className="p-4">
-      {/* Filters */}
-      <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
-        <select
-          value={category}
-          onChange={(e) => setFilter('category', e.target.value)}
-          className="px-3 py-2 rounded-xl border border-gray-300 bg-white text-ink text-sm flex-shrink-0"
-        >
-          {categories.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={car}
-          onChange={(e) => setFilter('car', e.target.value)}
-          className="px-3 py-2 rounded-xl border border-gray-300 bg-white text-ink text-sm flex-shrink-0"
-        >
-          {cars.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
-        </select>
+      {/* Search bar / toggle */}
+      <div className="mb-3">
+        {showSearch ? (
+          <div className="flex items-center gap-2">
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Пошук по назві або опису..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm bg-white"
+              autoFocus
+            />
+            <button
+              onClick={closeSearch}
+              className="w-9 h-9 flex items-center justify-center text-gray-500 hover:text-ink rounded-xl border border-gray-300 bg-white flex-shrink-0 text-lg leading-none"
+              aria-label="Закрити пошук"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <button
+              onClick={openSearch}
+              className="w-9 h-9 flex items-center justify-center text-gray-500 hover:text-primary rounded-xl border border-gray-300 bg-white"
+              aria-label="Пошук"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Filters — hidden while searching */}
+      {!showSearch && (
+        <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
+          <select
+            value={category}
+            onChange={(e) => setFilter('category', e.target.value)}
+            className="px-3 py-2 rounded-xl border border-gray-300 bg-white text-ink text-sm flex-shrink-0"
+          >
+            {categories.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+
+          <select
+            value={car}
+            onChange={(e) => setFilter('car', e.target.value)}
+            className="px-3 py-2 rounded-xl border border-gray-300 bg-white text-ink text-sm flex-shrink-0"
+          >
+            {cars.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Products */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-400">Завантаження...</div>
       ) : isError ? (
         <div className="text-center py-12 text-gray-400">Не вдалося завантажити товари</div>
-      ) : products?.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">Товарів не знайдено</div>
+      ) : filteredProducts.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          {searchQuery ? 'Нічого не знайдено' : 'Товарів не знайдено'}
+        </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
-          {products?.map((product) => (
+          {filteredProducts.map((product) => (
             <div key={product.id} className="card flex flex-col p-0 overflow-hidden">
               {/* Photo */}
               <Link to={`/product/${product.id}`} className="block">
@@ -165,12 +230,8 @@ export default function HomePage() {
                     title="Додати в кошик"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                      />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                   </button>
                 </div>
