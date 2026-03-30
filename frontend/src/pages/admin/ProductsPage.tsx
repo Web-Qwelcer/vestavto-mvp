@@ -4,6 +4,12 @@ import api from '../../api'
 import { useAuthStore } from '../../store/auth'
 import { Navigate } from 'react-router-dom'
 
+interface ImportResult {
+  created: number
+  updated: number
+  errors: { row: number; error: string }[]
+}
+
 export default function AdminProductsPage() {
   const { isManager, isLoading: authLoading } = useAuthStore()
   const queryClient = useQueryClient()
@@ -13,9 +19,13 @@ export default function AdminProductsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [uploadingId, setUploadingId] = useState<number | null>(null)
   const [pendingPhotos, setPendingPhotos] = useState<File[]>([])
+  const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const addPhotoInputRef = useRef<HTMLInputElement>(null)
+  const importFileRef = useRef<HTMLInputElement>(null)
   const uploadTargetId = useRef<number | null>(null)
 
   const [form, setForm] = useState({
@@ -156,24 +166,114 @@ export default function AdminProductsPage() {
     setForm((prev) => ({ ...prev, photos: prev.photos.filter((_, i) => i !== index) }))
   }
 
+  const handleExport = async () => {
+    setIsExporting(true)
+    try {
+      const res = await api.get('/products/export', { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'products.xlsx'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      alert('Помилка експорту')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setIsImporting(true)
+    setImportResult(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await api.post('/products/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setImportResult(res.data)
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] })
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || 'Помилка імпорту')
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
   // Conditional returns after hooks
   if (authLoading) return <div className="p-4 text-center text-ink">Завантаження...</div>
   if (!isManager) return <Navigate to="/" />
 
   return (
     <div className="p-4 text-ink">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-center mb-3">
         <h1 className="text-xl font-bold text-ink">Товари</h1>
-        <button
-          onClick={() => {
-            resetForm()
-            setShowForm(true)
-          }}
-          className="btn-primary"
-        >
-          + Додати
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Export */}
+          <button
+            onClick={handleExport}
+            disabled={isExporting}
+            title="Експорт в Excel"
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-ink bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            {isExporting ? '...' : '📥 Експорт'}
+          </button>
+
+          {/* Import */}
+          <button
+            onClick={() => importFileRef.current?.click()}
+            disabled={isImporting}
+            title="Імпорт з Excel"
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-ink bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            {isImporting ? '...' : '📤 Імпорт'}
+          </button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={handleImportFile}
+          />
+
+          {/* Add */}
+          <button
+            onClick={() => { resetForm(); setShowForm(true) }}
+            className="btn-primary"
+          >
+            + Додати
+          </button>
+        </div>
       </div>
+
+      {/* Import result banner */}
+      {importResult && (
+        <div className={`mb-3 p-3 rounded-xl border text-sm ${
+          importResult.errors.length > 0
+            ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
+            : 'bg-green-50 border-green-200 text-green-800'
+        }`}>
+          <div className="font-medium mb-1">
+            Імпорт завершено: створено {importResult.created}, оновлено {importResult.updated}
+            {importResult.errors.length > 0 && `, помилок ${importResult.errors.length}`}
+          </div>
+          {importResult.errors.map((e, i) => (
+            <div key={i} className="text-xs">Рядок {e.row}: {e.error}</div>
+          ))}
+          <button
+            onClick={() => setImportResult(null)}
+            className="mt-1 text-xs underline opacity-70"
+          >
+            Закрити
+          </button>
+        </div>
+      )}
 
       {showForm && (
         <div className="card mb-4 bg-white">

@@ -1,11 +1,16 @@
 """
 VestAvto MVP - Products Routes
 """
+import io
 import json
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_session
 from app.models import Product, Category, CarModel, OrderItem, Order, OrderStatus
@@ -43,6 +48,169 @@ async def get_products(
     products = result.scalars().all()
     
     return [ProductResponse.model_validate(p) for p in products]
+
+
+@router.get("/export")
+async def export_products(
+    session: AsyncSession = Depends(get_session),
+    manager: UserInfo = Depends(get_current_manager)
+):
+    """Вивантажити всі товари у Excel-файл (менеджер)"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    result = await session.execute(
+        select(Product).order_by(Product.id)
+    )
+    products = result.scalars().all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Товари"
+
+    # Header row
+    headers = ["id", "name", "description", "price", "deposit",
+               "category", "car_model", "in_stock", "photos"]
+    ws.append(headers)
+
+    # Style header
+    header_fill = PatternFill(start_color="2563EB", end_color="2563EB", fill_type="solid")
+    for col, cell in enumerate(ws[1], start=1):
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+        ws.column_dimensions[cell.column_letter].width = [
+            6, 35, 50, 10, 10, 16, 16, 10, 60
+        ][col - 1]
+
+    # Data rows
+    for p in products:
+        photos: list = []
+        if p.photos:
+            try:
+                photos = json.loads(p.photos)
+            except Exception:
+                photos = []
+        ws.append([
+            p.id,
+            p.name,
+            p.description or "",
+            p.price,
+            p.deposit,
+            p.category.value if p.category else "",
+            p.car_model.value if p.car_model else "",
+            "true" if p.is_available else "false",
+            ", ".join(photos),
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=products.xlsx"}
+    )
+
+
+@router.post("/import")
+async def import_products(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    manager: UserInfo = Depends(get_current_manager)
+):
+    """Завантажити товари з Excel-файлу (менеджер). id пустий = новий, id є = оновлення."""
+    from openpyxl import load_workbook
+
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Файл має бути у форматі .xlsx")
+
+    content = await file.read()
+    try:
+        wb = load_workbook(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Не вдалось відкрити файл: {exc}")
+
+    ws = wb.active
+    created = 0
+    updated = 0
+    errors: list = []
+
+    for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        # Skip completely empty rows
+        if not any(cell is not None and str(cell).strip() != "" for cell in row):
+            continue
+        try:
+            raw_id       = row[0] if len(row) > 0 else None
+            name         = str(row[1] or "").strip() if len(row) > 1 else ""
+            description  = str(row[2] or "").strip() if len(row) > 2 else ""
+            price        = float(row[3] or 0)         if len(row) > 3 else 0.0
+            deposit      = float(row[4] or 0)         if len(row) > 4 else 0.0
+            category_val = str(row[5] or "other").strip().lower() if len(row) > 5 else "other"
+            car_val      = str(row[6] or "other").strip().lower() if len(row) > 6 else "other"
+            in_stock_val = str(row[7] or "true").strip().lower()  if len(row) > 7 else "true"
+            photos_str   = str(row[8] or "").strip()              if len(row) > 8 else ""
+
+            if not name:
+                errors.append({"row": row_idx, "error": "Назва товару обов'язкова"})
+                continue
+            if price <= 0:
+                errors.append({"row": row_idx, "error": "Ціна має бути більше 0"})
+                continue
+
+            try:
+                category = Category(category_val)
+            except ValueError:
+                category = Category.OTHER
+
+            try:
+                car_model = CarModel(car_val)
+            except ValueError:
+                car_model = CarModel.OTHER
+
+            is_available = in_stock_val in ("true", "1", "yes", "так")
+            photos = [u.strip() for u in photos_str.split(",") if u.strip()] if photos_str else []
+
+            if raw_id:
+                # Update existing product
+                res = await session.execute(
+                    select(Product).where(Product.id == int(raw_id))
+                )
+                product = res.scalar_one_or_none()
+                if not product:
+                    errors.append({"row": row_idx, "error": f"Товар з id={raw_id} не знайдено"})
+                    continue
+                product.name         = name
+                product.description  = description or None
+                product.price        = price
+                product.deposit      = deposit
+                product.category     = category
+                product.car_model    = car_model
+                product.is_available = is_available
+                product.photos       = json.dumps(photos) if photos else None
+                updated += 1
+            else:
+                # Create new product
+                product = Product(
+                    name=name,
+                    description=description or None,
+                    price=price,
+                    deposit=deposit,
+                    category=category,
+                    car_model=car_model,
+                    is_available=is_available,
+                    photos=json.dumps(photos) if photos else None,
+                )
+                session.add(product)
+                created += 1
+
+        except Exception as exc:
+            logger.exception(f"[Import] Row {row_idx} error: {exc}")
+            errors.append({"row": row_idx, "error": str(exc)})
+
+    await session.commit()
+    return {"created": created, "updated": updated, "errors": errors}
 
 
 @router.get("/{product_id}", response_model=ProductResponse)

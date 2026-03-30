@@ -28,6 +28,9 @@ pydantic-settings>=2.1.0
 # Cloudinary
 cloudinary>=1.40.0
 
+# Excel import/export
+openpyxl>=3.1.0
+
 # Dev
 pytest>=7.4.4
 pytest-asyncio>=0.23.3
