@@ -244,7 +244,7 @@ async def create_ttn_for_order(order_id: int):
                 f"remaining={remaining} city_ref={order.np_city_ref}"
             )
 
-            ttn = await novaposhta.create_ttn(
+            ttn, np_error = await novaposhta.create_ttn(
                 recipient_name=order.recipient_name,
                 recipient_phone=order.recipient_phone,
                 city_ref=order.np_city_ref,
@@ -280,8 +280,9 @@ async def create_ttn_for_order(order_id: int):
                     )
             else:
                 msg = (
-                    f"Nova Poshta повернула None для замовлення #{order_id}. "
-                    "Перевір env vars: NOVAPOSHTA_API_KEY, NP_SENDER_REF, "
+                    f"Nova Poshta не створила ТТН для замовлення #{order_id}."
+                    + (f"\n\nВідповідь API: {np_error}" if np_error else "")
+                    + "\n\nПеревір env vars: NOVAPOSHTA_API_KEY, NP_SENDER_REF, "
                     "NP_CONTACT_SENDER_REF, NP_SENDER_PHONE, "
                     "NP_CITY_SENDER_REF, NP_WAREHOUSE_SENDER_REF"
                 )

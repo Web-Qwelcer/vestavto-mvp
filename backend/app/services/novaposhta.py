@@ -5,7 +5,7 @@ import os
 import logging
 from datetime import datetime
 import httpx
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +25,13 @@ def _cfg(key: str) -> str:
     return os.getenv(key, "")
 
 
-async def _call_api(model: str, method: str, properties: dict) -> Optional[dict]:
-    """Виклик API Нової Пошти"""
+async def _call_api(model: str, method: str, properties: dict) -> Tuple[Optional[list], str]:
+    """Виклик API Нової Пошти. Повертає (data, error_details)."""
     api_key = _cfg("NOVAPOSHTA_API_KEY")
     if not api_key:
-        logger.error("[NP] NOVAPOSHTA_API_KEY is not set — skipping API call")
-        return None
+        msg = "NOVAPOSHTA_API_KEY is not set — skipping API call"
+        logger.error(f"[NP] {msg}")
+        return None, msg
 
     payload = {
         "apiKey": api_key,
@@ -45,22 +46,34 @@ async def _call_api(model: str, method: str, properties: dict) -> Optional[dict]
             data = response.json()
 
             if data.get("success"):
-                return data.get("data", [])
+                return data.get("data", []), ""
             else:
-                logger.error(f"[NP] API Error model={model} method={method}: {data.get('errors')}")
-                return None
+                errors   = data.get("errors") or []
+                warnings = data.get("warnings") or []
+                info     = data.get("info") or []
+                error_details = (
+                    f"errors={errors}"
+                    + (f" | warnings={warnings}" if warnings else "")
+                    + (f" | info={info}" if info else "")
+                )
+                logger.error(
+                    f"[NP] API Error model={model} method={method} | "
+                    f"full_response={data}"
+                )
+                return None, error_details
         except Exception as e:
-            logger.exception(f"[NP] Request error model={model} method={method}: {e}")
-            return None
+            msg = f"Request exception: {e}"
+            logger.exception(f"[NP] {msg} model={model} method={method}")
+            return None, msg
 
 
 async def search_cities(query: str, limit: int = 10) -> List[dict]:
     """Пошук міст"""
-    result = await _call_api("Address", "searchSettlements", {
+    result, _ = await _call_api("Address", "searchSettlements", {
         "CityName": query,
         "Limit": str(limit)
     })
-    
+
     if not result:
         return []
     
@@ -83,8 +96,8 @@ async def get_warehouses(city_ref: str, search: str = "") -> List[dict]:
     if search:
         props["FindByString"] = search
     
-    result = await _call_api("Address", "getWarehouses", props)
-    
+    result, _ = await _call_api("Address", "getWarehouses", props)
+
     if not result:
         return []
     
@@ -110,7 +123,7 @@ async def create_ttn(
     weight: float = 1,
     seats_amount: int = 1,
     payment_method: str = "NonCash"  # NonCash = передплата, Cash = накладений платіж
-) -> Optional[dict]:
+) -> Tuple[Optional[dict], str]:
     """
     Створити ТТН.
     payment_method: NonCash (передплата) або Cash (накладений платіж)
@@ -144,7 +157,7 @@ async def create_ttn(
         msg = f"Не задані env vars: {missing}"
         logger.error(f"[NP] Cannot create TTN — {msg}")
         await _notify_error(msg, "Nova Poshta — створення ТТН")
-        return None
+        return None, msg
 
     # ── БАГ 6 FIX: DateTime: "" → поточна дата у форматі НП "DD.MM.YYYY"
     today = datetime.now().strftime("%d.%m.%Y")
@@ -193,8 +206,8 @@ async def create_ttn(
             "RedeliveryString": str(int(cash_on_delivery))
         }]
     
-    result = await _call_api("InternetDocument", "save", properties)
-    
+    result, error_details = await _call_api("InternetDocument", "save", properties)
+
     if result and len(result) > 0:
         ttn = result[0]
         return {
@@ -202,13 +215,13 @@ async def create_ttn(
             "ttn_ref": ttn.get("Ref"),
             "cost_on_site": ttn.get("CostOnSite"),
             "estimated_delivery": ttn.get("EstimatedDeliveryDate")
-        }
-    return None
+        }, ""
+    return None, error_details
 
 
 async def get_ttn_status(ttn_number: str) -> Optional[dict]:
     """Отримати статус ТТН"""
-    result = await _call_api("TrackingDocument", "getStatusDocuments", {
+    result, _ = await _call_api("TrackingDocument", "getStatusDocuments", {
         "Documents": [{"DocumentNumber": ttn_number}]
     })
     
@@ -225,7 +238,7 @@ async def get_ttn_status(ttn_number: str) -> Optional[dict]:
 
 async def delete_ttn(ttn_ref: str) -> bool:
     """Видалити ТТН (якщо ще не відправлено)"""
-    result = await _call_api("InternetDocument", "delete", {
+    result, _ = await _call_api("InternetDocument", "delete", {
         "DocumentRefs": ttn_ref
     })
     return result is not None
