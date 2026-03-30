@@ -20,7 +20,6 @@ export default function AdminProductsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [uploadingId, setUploadingId] = useState<number | null>(null)
   const [pendingPhotos, setPendingPhotos] = useState<File[]>([])
-  const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
 
@@ -167,33 +166,13 @@ export default function AdminProductsPage() {
     setForm((prev) => ({ ...prev, photos: prev.photos.filter((_, i) => i !== index) }))
   }
 
-  const handleExport = async () => {
-    setIsExporting(true)
-    try {
-      const res = await api.get('/products/export', { responseType: 'blob' })
-      const url = URL.createObjectURL(res.data)
-
-      // iOS Safari ignores <a download> for blob URLs — open in new tab instead.
-      // On desktop/Android the standard anchor click works fine.
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-      if (isIOS) {
-        window.open(url, '_blank')
-        // Delay revoke so Safari has time to read the blob
-        setTimeout(() => URL.revokeObjectURL(url), 10_000)
-      } else {
-        const a = document.createElement('a')
-        a.href = url
-        a.download = 'products.xlsx'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-      }
-    } catch {
-      alert('Помилка експорту')
-    } finally {
-      setIsExporting(false)
-    }
+  const handleExport = () => {
+    // Pass JWT as query param so the browser navigates directly to the file URL.
+    // This works on all platforms including iOS Safari / Telegram WebView
+    // (which ignores <a download> and blob URL workarounds).
+    const token = useAuthStore.getState().token
+    const base = (api.defaults.baseURL ?? '').replace(/\/$/, '')
+    window.open(`${base}/products/export?token=${token}`, '_blank')
   }
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -223,17 +202,15 @@ export default function AdminProductsPage() {
 
   return (
     <div className="p-4 text-ink">
-      <div className="flex justify-between items-center mb-3">
-        <h1 className="text-xl font-bold text-ink">Товари</h1>
-        <div className="flex items-center gap-2">
+      <h1 className="text-xl font-bold text-ink mb-3">Товари</h1>
+      <div className="flex items-center gap-3 mb-4">
           {/* Export */}
           <button
             onClick={handleExport}
-            disabled={isExporting}
             title="Експорт в Excel"
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-ink bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-ink bg-white hover:bg-gray-50"
           >
-            {isExporting ? '...' : '📥 Експорт'}
+            📥 Експорт
           </button>
 
           {/* Import */}
@@ -260,7 +237,6 @@ export default function AdminProductsPage() {
           >
             + Додати
           </button>
-        </div>
       </div>
 
       {/* Import result banner */}

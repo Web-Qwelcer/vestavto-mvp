@@ -15,7 +15,11 @@ logger = logging.getLogger(__name__)
 from app.database import get_session
 from app.models import Product, Category, CarModel, OrderItem, Order, OrderStatus
 from app.schemas import ProductCreate, ProductUpdate, ProductResponse, UserInfo
-from app.auth import get_current_user, get_current_manager
+from app.auth import get_current_user, get_current_manager, decode_token
+from app.models import UserRole
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+_security = HTTPBearer(auto_error=False)
 router = APIRouter(prefix="/products", tags=["Products"])
 
 
@@ -52,10 +56,19 @@ async def get_products(
 
 @router.get("/export")
 async def export_products(
+    token: Optional[str] = Query(None, description="JWT token (для iOS direct download)"),
     session: AsyncSession = Depends(get_session),
-    manager: UserInfo = Depends(get_current_manager)
+    credentials: HTTPAuthorizationCredentials = Depends(_security),
 ):
-    """Вивантажити всі товари у Excel-файл (менеджер)"""
+    """Вивантажити всі товари у Excel-файл (менеджер).
+    Auth: Bearer header АБО ?token= query param (для iOS прямого URL)."""
+    raw_token = token or (credentials.credentials if credentials else None)
+    if not raw_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = decode_token(raw_token)
+    if UserRole(payload.get("role", "client")) == UserRole.CLIENT:
+        raise HTTPException(status_code=403, detail="Manager access required")
+
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
 
