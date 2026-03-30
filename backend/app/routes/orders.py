@@ -16,7 +16,7 @@ from app.database import get_session
 from app.models import Order, OrderItem, Product, OrderStatus, PaymentType, UserRole
 from app.schemas import (
     OrderCreate, OrderResponse, OrderItemResponse,
-    OrderStatusUpdate, UserInfo
+    OrderStatusUpdate, OrderContactUpdate, UserInfo
 )
 from app.auth import get_current_user, get_current_manager
 from app.services.telegram_notify import send_manager_notification, send_error_notification
@@ -175,6 +175,41 @@ async def check_payment_timeout(order_id: int) -> None:
                 )
     except Exception as exc:
         logger.exception(f"[Timeout] Error checking order {order_id}: {exc}")
+
+
+@router.patch("/{order_id}/contact", response_model=OrderResponse)
+async def update_order_contact(
+    order_id: int,
+    data: OrderContactUpdate,
+    session: AsyncSession = Depends(get_session),
+    manager: UserInfo = Depends(get_current_manager)
+):
+    """Оновити контактні дані замовлення (менеджер). Заблоковано після створення ТТН."""
+    result = await session.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id == order_id)
+    )
+    order = result.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.ttn_number:
+        raise HTTPException(
+            status_code=409,
+            detail="Неможливо редагувати — ТТН вже створено (дані передані в Нову Пошту)"
+        )
+
+    order.recipient_name = data.recipient_name
+    order.recipient_phone = data.recipient_phone
+
+    product_ids = [item.product_id for item in order.items]
+    prod_result = await session.execute(
+        select(Product).where(Product.id.in_(product_ids))
+    )
+    products = {p.id: p for p in prod_result.scalars().all()}
+
+    return await _order_to_response(order, products)
 
 
 async def _notify_order_error(exc: Exception, context: str) -> None:

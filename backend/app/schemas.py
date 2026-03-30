@@ -2,6 +2,7 @@
 VestAvto MVP - Pydantic Schemas
 """
 import json
+import re
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator
@@ -163,6 +164,32 @@ class OrderResponse(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: OrderStatus
+
+
+class OrderContactUpdate(BaseModel):
+    recipient_name: str
+    recipient_phone: str
+
+    @field_validator('recipient_phone')
+    @classmethod
+    def validate_phone(cls, v: str) -> str:
+        digits = re.sub(r'\D', '', v)
+        if len(digits) == 12 and digits.startswith('38'):
+            digits = digits[2:]
+        if not re.fullmatch(r'\d{10}', digits):
+            raise ValueError('Невірний номер телефону (має бути 10 цифр)')
+        return digits
+
+    @field_validator('recipient_name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        trimmed = v.strip()
+        words = [w for w in trimmed.split() if w]
+        if len(words) < 2:
+            raise ValueError("Введіть ім'я та прізвище (мінімум 2 слова)")
+        if not re.fullmatch(r"[\u0400-\u04FFa-zA-Z'\- ]+", trimmed):
+            raise ValueError("Ім'я містить недопустимі символи")
+        return trimmed
 
 
 # === Nova Poshta ===
