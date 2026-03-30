@@ -246,7 +246,7 @@ export default function AdminProductsPage() {
           {/* Add */}
           <button
             onClick={() => { resetForm(); setShowForm(true) }}
-            className="btn-primary"
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-primary text-white hover:bg-blue-700"
           >
             + Додати
           </button>
