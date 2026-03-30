@@ -174,7 +174,7 @@ export default function CheckoutPage() {
   const payAmount = form.payment_type === 'deposit' ? depositTotal() : total()
 
   return (
-    <div className="p-4 pb-32">
+    <div className="p-4 pb-44">
       <h1 className="text-xl font-bold mb-4">Оформлення</h1>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -303,7 +303,7 @@ export default function CheckoutPage() {
         </div>
 
         {/* Fixed bottom */}
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+        <div className="fixed bottom-16 left-0 right-0 p-4 bg-white border-t">
           <div className="max-w-lg mx-auto">
             {errorMsg && (
               <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">

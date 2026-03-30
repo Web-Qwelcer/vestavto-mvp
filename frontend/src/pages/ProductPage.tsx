@@ -85,7 +85,7 @@ export default function ProductPage() {
   const carLabel = CAR_LABELS[product.car_model] ?? product.car_model
 
   return (
-    <div className="pb-36">
+    <div className="pb-52">
       {/* Photo carousel */}
       <div
         className="aspect-square bg-gray-100 relative overflow-hidden select-none"
@@ -185,7 +185,7 @@ export default function ProductPage() {
       </div>
 
       {/* Fixed bottom buttons */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 space-y-2">
+      <div className="fixed bottom-16 left-0 right-0 p-4 bg-white border-t border-gray-100 space-y-2">
         <button onClick={handleAddToCart} className="btn-primary w-full py-3">
           Додати в кошик
         </button>

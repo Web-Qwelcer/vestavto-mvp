@@ -14,7 +14,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="p-4 pb-32">
+    <div className="p-4 pb-44">
       <h1 className="text-xl font-bold mb-4">Кошик</h1>
 
       <div className="space-y-3">
@@ -62,7 +62,7 @@ export default function CartPage() {
       </div>
 
       {/* Fixed bottom */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
+      <div className="fixed bottom-16 left-0 right-0 p-4 bg-white border-t">
         <div className="max-w-lg mx-auto">
           <div className="flex justify-between mb-2">
             <span>Разом:</span>
