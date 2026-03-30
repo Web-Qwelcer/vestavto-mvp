@@ -4,6 +4,32 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import { useCartStore } from '../store/cart'
 
+// ── Validation helpers ──────────────────────────────────────────────────────
+
+/** Залишає лише цифри, потім знімає код країни 38 якщо 12 цифр */
+function normalizePhone(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length === 12 && digits.startsWith('38')) return digits.slice(2)
+  return digits
+}
+
+function validatePhone(value: string): string {
+  const normalized = normalizePhone(value)
+  if (!/^\d{10}$/.test(normalized)) return 'Невірний номер телефону (має бути 10 цифр)'
+  return ''
+}
+
+function validateName(value: string): string {
+  const trimmed = value.trim()
+  const words = trimmed.split(/\s+/).filter(Boolean)
+  if (words.length < 2) return "Введіть ім'я та прізвище"
+  // Дозволяємо кирилицю, латиницю, пробіл, апостроф, дефіс
+  if (!/^[\u0400-\u04FFa-zA-Z'\- ]+$/.test(trimmed)) return "Введіть ім'я та прізвище"
+  return ''
+}
+
+// ── Component ───────────────────────────────────────────────────────────────
+
 export default function CheckoutPage() {
   const { items, total, depositTotal, clearCart } = useCartStore()
   const navigate = useNavigate()
@@ -17,9 +43,13 @@ export default function CheckoutPage() {
     np_warehouse_name: '',
     payment_type: 'deposit' as 'deposit' | 'full'
   })
-  
+
   const [citySearch, setCitySearch] = useState('')
   const [warehouseSearch, setWarehouseSearch] = useState('')
+
+  // Validation state
+  const [touched, setTouched] = useState({ recipient_name: false, recipient_phone: false })
+  const [fieldErrors, setFieldErrors] = useState({ recipient_name: '', recipient_phone: '' })
 
   // City search
   const { data: cities } = useQuery({
@@ -37,8 +67,8 @@ export default function CheckoutPage() {
     queryKey: ['warehouses', form.np_city_ref, warehouseSearch],
     queryFn: async () => {
       if (!form.np_city_ref) return []
-      const res = await api.get('/delivery/warehouses', { 
-        params: { city_ref: form.np_city_ref, search: warehouseSearch } 
+      const res = await api.get('/delivery/warehouses', {
+        params: { city_ref: form.np_city_ref, search: warehouseSearch }
       })
       return res.data
     },
@@ -53,8 +83,8 @@ export default function CheckoutPage() {
       const res = await api.post('/orders', {
         items: items.map(i => ({ product_id: i.id, quantity: i.quantity })),
         payment_type: form.payment_type,
-        recipient_name: form.recipient_name,
-        recipient_phone: form.recipient_phone,
+        recipient_name: form.recipient_name.trim(),
+        recipient_phone: normalizePhone(form.recipient_phone),
         np_city_ref: form.np_city_ref,
         np_city_name: form.np_city_name,
         np_warehouse_ref: form.np_warehouse_ref,
@@ -63,8 +93,6 @@ export default function CheckoutPage() {
       return res.data
     },
     onSuccess: async (order) => {
-      // Очищаємо кошик одразу — замовлення створено, товари зарезервовано.
-      // Не чекаємо на payment, щоб cart точно очистився навіть якщо payment упаде.
       clearCart()
       try {
         const payRes = await api.post('/payments/create', {
@@ -78,11 +106,9 @@ export default function CheckoutPage() {
         } else {
           window.open(pageUrl, '_blank')
         }
-        // Переходимо на сторінку замовлення після відкриття payment URL
         navigate(`/order/${order.id}`)
       } catch (err: any) {
         setErrorMsg(err?.response?.data?.detail || 'Помилка створення платежу')
-        // Навіть при помилці payment — переходимо на замовлення (можна оплатити потім)
         navigate(`/order/${order.id}`)
       }
     },
@@ -91,21 +117,59 @@ export default function CheckoutPage() {
     }
   })
 
+  // ── Handlers ──
+
+  const handleNameChange = (value: string) => {
+    setForm(f => ({ ...f, recipient_name: value }))
+    if (touched.recipient_name) {
+      setFieldErrors(prev => ({ ...prev, recipient_name: validateName(value) }))
+    }
+  }
+
+  const handlePhoneChange = (value: string) => {
+    setForm(f => ({ ...f, recipient_phone: value }))
+    if (touched.recipient_phone) {
+      setFieldErrors(prev => ({ ...prev, recipient_phone: validatePhone(value) }))
+    }
+  }
+
+  const handleNameBlur = () => {
+    setTouched(prev => ({ ...prev, recipient_name: true }))
+    setFieldErrors(prev => ({ ...prev, recipient_name: validateName(form.recipient_name) }))
+  }
+
+  const handlePhoneBlur = () => {
+    setTouched(prev => ({ ...prev, recipient_phone: true }))
+    setFieldErrors(prev => ({ ...prev, recipient_phone: validatePhone(form.recipient_phone) }))
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMsg(null)
+
+    // Touch all validated fields and run full check
+    const nameErr = validateName(form.recipient_name)
+    const phoneErr = validatePhone(form.recipient_phone)
+    setTouched({ recipient_name: true, recipient_phone: true })
+    setFieldErrors({ recipient_name: nameErr, recipient_phone: phoneErr })
+
+    if (nameErr || phoneErr) return
     createOrder.mutate()
   }
 
   const selectCity = (city: any) => {
-    setForm({ ...form, np_city_ref: city.ref, np_city_name: city.name, np_warehouse_ref: '', np_warehouse_name: '' })
+    setForm(f => ({ ...f, np_city_ref: city.ref, np_city_name: city.name, np_warehouse_ref: '', np_warehouse_name: '' }))
     setCitySearch(city.name)
   }
 
   const selectWarehouse = (wh: any) => {
-    setForm({ ...form, np_warehouse_ref: wh.ref, np_warehouse_name: wh.name })
+    setForm(f => ({ ...f, np_warehouse_ref: wh.ref, np_warehouse_name: wh.name }))
     setWarehouseSearch(wh.name)
   }
+
+  // Button disabled when there are known errors or form is pending
+  const hasFieldErrors = !!fieldErrors.recipient_name || !!fieldErrors.recipient_phone
+  const isSubmitDisabled = hasFieldErrors || createOrder.isPending
 
   const payAmount = form.payment_type === 'deposit' ? depositTotal() : total()
 
@@ -117,36 +181,50 @@ export default function CheckoutPage() {
         {/* Contact */}
         <div className="card">
           <h2 className="font-medium mb-3">Контактні дані</h2>
-          
-          <input
-            type="text"
-            placeholder="ПІБ отримувача"
-            value={form.recipient_name}
-            onChange={(e) => setForm({ ...form, recipient_name: e.target.value })}
-            className="w-full p-3 border rounded-lg mb-3"
-            required
-          />
-          
-          <input
-            type="tel"
-            placeholder="Телефон (380...)"
-            value={form.recipient_phone}
-            onChange={(e) => setForm({ ...form, recipient_phone: e.target.value })}
-            className="w-full p-3 border rounded-lg"
-            required
-          />
+
+          {/* Name */}
+          <div className="mb-3">
+            <input
+              type="text"
+              placeholder="Прізвище Ім'я По-батькові"
+              value={form.recipient_name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              onBlur={handleNameBlur}
+              className={`w-full p-3 border rounded-lg ${fieldErrors.recipient_name ? 'border-red-400 bg-red-50' : ''}`}
+              required
+            />
+            {fieldErrors.recipient_name && (
+              <p className="mt-1 text-xs text-red-600">{fieldErrors.recipient_name}</p>
+            )}
+          </div>
+
+          {/* Phone */}
+          <div>
+            <input
+              type="tel"
+              placeholder="0671234567 або +380671234567"
+              value={form.recipient_phone}
+              onChange={(e) => handlePhoneChange(e.target.value)}
+              onBlur={handlePhoneBlur}
+              className={`w-full p-3 border rounded-lg ${fieldErrors.recipient_phone ? 'border-red-400 bg-red-50' : ''}`}
+              required
+            />
+            {fieldErrors.recipient_phone && (
+              <p className="mt-1 text-xs text-red-600">{fieldErrors.recipient_phone}</p>
+            )}
+          </div>
         </div>
 
         {/* Delivery */}
         <div className="card">
           <h2 className="font-medium mb-3">Доставка (Нова Пошта)</h2>
-          
+
           <div className="relative mb-3">
             <input
               type="text"
               placeholder="Місто"
               value={citySearch}
-              onChange={(e) => { setCitySearch(e.target.value); setForm({ ...form, np_city_ref: '' }) }}
+              onChange={(e) => { setCitySearch(e.target.value); setForm(f => ({ ...f, np_city_ref: '' })) }}
               className="w-full p-3 border rounded-lg"
               required
             />
@@ -171,7 +249,7 @@ export default function CheckoutPage() {
               type="text"
               placeholder="Відділення"
               value={warehouseSearch}
-              onChange={(e) => { setWarehouseSearch(e.target.value); setForm({ ...form, np_warehouse_ref: '' }) }}
+              onChange={(e) => { setWarehouseSearch(e.target.value); setForm(f => ({ ...f, np_warehouse_ref: '' })) }}
               className="w-full p-3 border rounded-lg"
               disabled={!form.np_city_ref}
               required
@@ -202,7 +280,7 @@ export default function CheckoutPage() {
               type="radio"
               name="payment"
               checked={form.payment_type === 'deposit'}
-              onChange={() => setForm({ ...form, payment_type: 'deposit' })}
+              onChange={() => setForm(f => ({ ...f, payment_type: 'deposit' }))}
             />
             <div>
               <div className="font-medium">Завдаток</div>
@@ -215,7 +293,7 @@ export default function CheckoutPage() {
               type="radio"
               name="payment"
               checked={form.payment_type === 'full'}
-              onChange={() => setForm({ ...form, payment_type: 'full' })}
+              onChange={() => setForm(f => ({ ...f, payment_type: 'full' }))}
             />
             <div>
               <div className="font-medium">Повна оплата</div>
@@ -224,7 +302,7 @@ export default function CheckoutPage() {
           </label>
         </div>
 
-        {/* Fixed bottom — всередині форми для роботи HTML-валідації */}
+        {/* Fixed bottom */}
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t">
           <div className="max-w-lg mx-auto">
             {errorMsg && (
@@ -238,10 +316,12 @@ export default function CheckoutPage() {
             </div>
             <button
               type="submit"
-              disabled={createOrder.isPending}
-              className="btn-primary w-full py-3 disabled:opacity-50"
+              disabled={isSubmitDisabled}
+              className={`btn-primary w-full py-3 transition-opacity ${
+                isSubmitDisabled ? 'opacity-40 cursor-not-allowed' : 'opacity-100'
+              }`}
             >
-              {createOrder.isPending ? 'Обробка...' : 'Оплатити'}
+              {createOrder.isPending ? 'Обробка...' : 'Оформити замовлення'}
             </button>
           </div>
         </div>
