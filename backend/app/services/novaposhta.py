@@ -216,6 +216,8 @@ async def create_ttn(
             "cost_on_site": ttn.get("CostOnSite"),
             "estimated_delivery": ttn.get("EstimatedDeliveryDate")
         }, ""
+    if not error_details:
+        error_details = f"API повернув порожній масив data (success=True, data=[])"
     return None, error_details
 
 
