@@ -54,7 +54,7 @@ async def create_ttn(
     remaining = order.total_amount - order.paid_amount
     payment_method = "Cash" if remaining > 0 else "NonCash"
     
-    ttn = await novaposhta.create_ttn(
+    ttn_result, np_error = await novaposhta.create_ttn(
         recipient_name=order.recipient_name,
         recipient_phone=order.recipient_phone,
         city_ref=order.np_city_ref,
@@ -64,15 +64,16 @@ async def create_ttn(
         cash_on_delivery=remaining,
         payment_method=payment_method
     )
-    
-    if not ttn:
-        raise HTTPException(status_code=500, detail="Failed to create TTN")
-    
-    order.ttn_number = ttn["ttn_number"]
-    order.ttn_ref = ttn["ttn_ref"]
+
+    if not ttn_result:
+        detail = f"Не вдалось створити ТТН: {np_error}" if np_error else "Не вдалось створити ТТН"
+        raise HTTPException(status_code=400, detail=detail)
+
+    order.ttn_number = ttn_result["ttn_number"]
+    order.ttn_ref = ttn_result["ttn_ref"]
     order.status = OrderStatus.PROCESSING
-    
-    return ttn
+
+    return ttn_result
 
 
 @router.get("/{order_id}/track")
