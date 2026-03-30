@@ -135,6 +135,7 @@ async def import_products(
     ws = wb.active
     created = 0
     updated = 0
+    skipped = 0
     errors: list = []
 
     for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
@@ -173,7 +174,7 @@ async def import_products(
             photos = [u.strip() for u in photos_str.split(",") if u.strip()] if photos_str else []
 
             if raw_id:
-                # Update existing product
+                # Update existing product only if something changed
                 res = await session.execute(
                     select(Product).where(Product.id == int(raw_id))
                 )
@@ -181,6 +182,30 @@ async def import_products(
                 if not product:
                     errors.append({"row": row_idx, "error": f"Товар з id={raw_id} не знайдено"})
                     continue
+
+                # Normalize existing photos for comparison
+                existing_photos: list = []
+                if product.photos:
+                    try:
+                        existing_photos = json.loads(product.photos)
+                    except Exception:
+                        existing_photos = []
+
+                changed = (
+                    product.name         != name
+                    or (product.description or "") != (description or "")
+                    or product.price        != price
+                    or product.deposit      != deposit
+                    or product.category     != category
+                    or product.car_model    != car_model
+                    or product.is_available != is_available
+                    or existing_photos      != photos
+                )
+
+                if not changed:
+                    skipped += 1
+                    continue
+
                 product.name         = name
                 product.description  = description or None
                 product.price        = price
@@ -210,7 +235,7 @@ async def import_products(
             errors.append({"row": row_idx, "error": str(exc)})
 
     await session.commit()
-    return {"created": created, "updated": updated, "errors": errors}
+    return {"created": created, "updated": updated, "skipped": skipped, "errors": errors}
 
 
 @router.get("/{product_id}", response_model=ProductResponse)

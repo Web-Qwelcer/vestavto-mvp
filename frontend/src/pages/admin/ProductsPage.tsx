@@ -7,6 +7,7 @@ import { Navigate } from 'react-router-dom'
 interface ImportResult {
   created: number
   updated: number
+  skipped: number
   errors: { row: number; error: string }[]
 }
 
@@ -260,7 +261,8 @@ export default function AdminProductsPage() {
             : 'bg-green-50 border-green-200 text-green-800'
         }`}>
           <div className="font-medium mb-1">
-            Імпорт завершено: створено {importResult.created}, оновлено {importResult.updated}
+            Імпорт завершено: створено {importResult.created}, оновлено {importResult.updated},
+            без змін {importResult.skipped}
             {importResult.errors.length > 0 && `, помилок ${importResult.errors.length}`}
           </div>
           {importResult.errors.map((e, i) => (
