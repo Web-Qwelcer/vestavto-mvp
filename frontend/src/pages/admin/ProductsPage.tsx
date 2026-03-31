@@ -242,7 +242,7 @@ export default function AdminProductsPage() {
           <button
             onClick={handleExport}
             title="Експорт в Excel"
-            className="flex-1 py-1 border border-gray-300 rounded-lg text-xs text-ink bg-white hover:bg-gray-50"
+            className="flex-1 h-9 border border-gray-300 rounded-lg text-xs text-ink bg-white hover:bg-gray-50"
           >
             📥 Експорт
           </button>
@@ -252,7 +252,7 @@ export default function AdminProductsPage() {
             onClick={() => importFileRef.current?.click()}
             disabled={isImporting}
             title="Імпорт з Excel"
-            className="flex-1 py-1 border border-gray-300 rounded-lg text-xs text-ink bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="flex-1 h-9 border border-gray-300 rounded-lg text-xs text-ink bg-white hover:bg-gray-50 disabled:opacity-50"
           >
             {isImporting ? '...' : '📤 Імпорт'}
           </button>
@@ -267,7 +267,7 @@ export default function AdminProductsPage() {
           {/* Add */}
           <button
             onClick={() => { resetForm(); setShowForm(true) }}
-            className="flex-1 py-1 rounded-lg text-xs font-medium bg-primary text-white hover:bg-blue-700"
+            className="flex-1 h-9 rounded-lg text-xs font-medium bg-primary text-white hover:bg-blue-700"
           >
             + Додати
           </button>
@@ -278,7 +278,7 @@ export default function AdminProductsPage() {
               setShowSearch(true)
               requestAnimationFrame(() => searchInputRef.current?.focus())
             }}
-            className="flex-1 py-1 flex items-center justify-center border border-gray-300 rounded-lg bg-white text-gray-500 hover:text-primary"
+            className="flex-1 h-9 flex items-center justify-center border border-gray-300 rounded-lg bg-white text-gray-500 hover:text-primary"
             title="Пошук"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -337,7 +337,7 @@ export default function AdminProductsPage() {
             </div>
             <button
               onClick={closeSearch}
-              className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg bg-white text-gray-500 hover:text-ink text-base"
+              className="w-9 h-9 flex items-center justify-center border border-gray-300 rounded-lg bg-white text-gray-500 hover:text-ink text-base flex-shrink-0"
             >
               ✕
             </button>
