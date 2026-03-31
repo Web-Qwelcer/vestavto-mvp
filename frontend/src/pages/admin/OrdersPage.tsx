@@ -33,6 +33,7 @@ export default function AdminOrdersPage() {
   // ── Edit contact state ──
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState({ recipient_name: '', recipient_phone: '' })
+  const [expandedId, setExpandedId] = useState<number | null>(null)
 
   // ALL hooks before conditional returns
   const { data: orders, isLoading } = useQuery({
@@ -107,16 +108,29 @@ export default function AdminOrdersPage() {
             const isEditing = editingId === order.id
             const canEdit = !order.ttn_number
 
+            const isExpanded = expandedId === order.id
+            const toggleExpand = () => setExpandedId(isExpanded ? null : order.id)
+
             return (
               <div key={order.id} className="card">
                 {/* Header row: id + status */}
                 <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <div className="font-bold text-ink">#{order.id}</div>
+                  <button
+                    onClick={toggleExpand}
+                    className="text-left flex-1 min-w-0 mr-2"
+                  >
+                    <div className="font-bold text-ink">
+                      #{order.id}
+                      {order.items?.length > 0 && (
+                        <span className="ml-1.5 text-xs font-normal text-gray-400">
+                          {order.items.length} поз. {isExpanded ? '▲' : '▼'}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm text-gray-500">
                       {new Date(order.created_at).toLocaleString('uk')}
                     </div>
-                  </div>
+                  </button>
                   <select
                     value={order.status}
                     onChange={(e) => updateStatus.mutate({ id: order.id, status: e.target.value })}
@@ -205,6 +219,25 @@ export default function AdminOrdersPage() {
                     </button>
                   ) : null}
                 </div>
+
+                {/* Expanded items list */}
+                {isExpanded && order.items?.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="space-y-1.5">
+                      {order.items.map((item: any) => (
+                        <div key={item.id} className="flex justify-between items-baseline text-xs">
+                          <span className="text-ink flex-1 min-w-0 truncate pr-2">
+                            {item.product_name}
+                            {item.quantity > 1 && (
+                              <span className="text-gray-400"> ×{item.quantity}</span>
+                            )}
+                          </span>
+                          <span className="text-gray-600 flex-shrink-0">{item.price * item.quantity} ₴</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}
