@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useAuthStore } from './store/auth'
 import Layout from './components/Layout'
@@ -13,6 +13,18 @@ import OrderPage from './pages/OrderPage'
 import AdminProductsPage from './pages/admin/ProductsPage'
 import AdminOrdersPage from './pages/admin/OrdersPage'
 
+function StartParamHandler() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param
+    if (startParam?.startsWith('product_')) {
+      const productId = startParam.replace('product_', '')
+      navigate(`/product/${productId}`)
+    }
+  }, [navigate])
+  return null
+}
+
 declare global {
   interface Window {
     Telegram: {
@@ -25,6 +37,7 @@ declare global {
             last_name?: string
             username?: string
           }
+          start_param?: string
         }
         ready: () => void
         expand: () => void
@@ -91,6 +104,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <StartParamHandler />
       <Routes>
         <Route path="/" element={<Layout />}>
           {/* Client routes */}
