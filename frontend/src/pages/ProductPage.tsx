@@ -113,22 +113,34 @@ export default function ProductPage() {
           </div>
         )}
 
-        {/* Arrows */}
+        {/* Half-zone tap areas */}
+        {hasMany && (
+          <>
+            <button
+              onClick={prev}
+              disabled={photoIdx === 0}
+              className="absolute inset-y-0 left-0 w-1/2"
+              aria-label="Попереднє фото"
+            />
+            <button
+              onClick={next}
+              disabled={photoIdx === photos.length - 1}
+              className="absolute inset-y-0 right-0 w-1/2"
+              aria-label="Наступне фото"
+            />
+          </>
+        )}
+
+        {/* Arrows (visual hint, pointer-events-none so tap zones handle clicks) */}
         {hasMany && photoIdx > 0 && (
-          <button
-            onClick={prev}
-            className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center text-xl leading-none hover:bg-black/60 transition-colors"
-          >
+          <div className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center text-xl leading-none pointer-events-none">
             ‹
-          </button>
+          </div>
         )}
         {hasMany && photoIdx < photos.length - 1 && (
-          <button
-            onClick={next}
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center text-xl leading-none hover:bg-black/60 transition-colors"
-          >
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center text-xl leading-none pointer-events-none">
             ›
-          </button>
+          </div>
         )}
 
         {/* Dot indicators */}
