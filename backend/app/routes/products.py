@@ -84,7 +84,7 @@ async def export_products(
 
     # Header row
     headers = ["id", "name", "description", "price", "deposit",
-               "category", "car_model", "in_stock", "photos", "is_negotiable"]
+               "category", "car_model", "is_available", "is_negotiable", "is_reserved"]
     ws.append(headers)
 
     # Style header
@@ -94,17 +94,11 @@ async def export_products(
         cell.fill = header_fill
         cell.alignment = Alignment(horizontal="center")
         ws.column_dimensions[cell.column_letter].width = [
-            6, 35, 50, 10, 10, 16, 16, 10, 60, 14
+            6, 35, 50, 10, 10, 16, 16, 12, 14, 12
         ][col - 1]
 
     # Data rows
     for p in products:
-        photos: list = []
-        if p.photos:
-            try:
-                photos = json.loads(p.photos)
-            except Exception:
-                photos = []
         ws.append([
             p.id,
             p.name,
@@ -114,8 +108,8 @@ async def export_products(
             p.category.value if p.category else "",
             p.car_model.value if p.car_model else "",
             "true" if p.is_available else "false",
-            ", ".join(photos),
             "true" if p.is_negotiable else "false",
+            "true" if p.is_reserved else "false",
         ])
 
     buf = io.BytesIO()
@@ -158,22 +152,23 @@ async def import_products(
         if not any(cell is not None and str(cell).strip() != "" for cell in row):
             continue
         try:
-            raw_id       = row[0] if len(row) > 0 else None
-            name         = str(row[1] or "").strip() if len(row) > 1 else ""
-            description  = str(row[2] or "").strip() if len(row) > 2 else ""
-            price        = float(row[3] or 0)         if len(row) > 3 else 0.0
-            deposit      = float(row[4] or 0)         if len(row) > 4 else 0.0
-            category_val = str(row[5] or "other").strip().lower() if len(row) > 5 else "other"
-            car_val      = str(row[6] or "other").strip().lower() if len(row) > 6 else "other"
-            in_stock_val     = str(row[7] or "true").strip().lower()  if len(row) > 7 else "true"
-            photos_str       = str(row[8] or "").strip()              if len(row) > 8 else ""
-            negotiable_val   = str(row[9] or "false").strip().lower() if len(row) > 9 else "false"
+            raw_id         = row[0] if len(row) > 0 else None
+            name           = str(row[1] or "").strip() if len(row) > 1 else ""
+            description    = str(row[2] or "").strip() if len(row) > 2 else ""
+            price          = float(row[3] or 0)                         if len(row) > 3 else 0.0
+            deposit        = float(row[4] or 0)                         if len(row) > 4 else 0.0
+            category_val   = str(row[5] or "other").strip().lower()     if len(row) > 5 else "other"
+            car_val        = str(row[6] or "other").strip().lower()     if len(row) > 6 else "other"
+            available_val  = str(row[7] or "true").strip().lower()      if len(row) > 7 else "true"
+            negotiable_val = str(row[8] or "false").strip().lower()     if len(row) > 8 else "false"
+            reserved_val   = str(row[9] or "false").strip().lower()     if len(row) > 9 else "false"
 
             if not name:
                 errors.append({"row": row_idx, "error": "Назва товару обов'язкова"})
                 continue
 
             is_negotiable = negotiable_val in ("true", "1", "yes", "так")
+            is_reserved   = reserved_val   in ("true", "1", "yes", "так")
 
             if price <= 0 and not is_negotiable:
                 errors.append({"row": row_idx, "error": "Ціна має бути більше 0 (або встановіть is_negotiable=true)"})
@@ -189,11 +184,11 @@ async def import_products(
             except ValueError:
                 car_model = CarModel.OTHER
 
-            is_available = in_stock_val in ("true", "1", "yes", "так")
-            photos = [u.strip() for u in photos_str.split(",") if u.strip()] if photos_str else []
+            is_available = available_val in ("true", "1", "yes", "так")
 
+            # Resolve product: by id → by name → create
+            product = None
             if raw_id:
-                # Update existing product only if something changed
                 res = await session.execute(
                     select(Product).where(Product.id == int(raw_id))
                 )
@@ -201,15 +196,14 @@ async def import_products(
                 if not product:
                     errors.append({"row": row_idx, "error": f"Товар з id={raw_id} не знайдено"})
                     continue
+            else:
+                # Try to find by exact name
+                res = await session.execute(
+                    select(Product).where(Product.name == name).limit(1)
+                )
+                product = res.scalar_one_or_none()
 
-                # Normalize existing photos for comparison
-                existing_photos: list = []
-                if product.photos:
-                    try:
-                        existing_photos = json.loads(product.photos)
-                    except Exception:
-                        existing_photos = []
-
+            if product:
                 changed = (
                     product.name           != name
                     or (product.description or "") != (description or "")
@@ -219,7 +213,7 @@ async def import_products(
                     or product.car_model      != car_model
                     or product.is_available   != is_available
                     or product.is_negotiable  != is_negotiable
-                    or existing_photos        != photos
+                    or product.is_reserved    != is_reserved
                 )
 
                 if not changed:
@@ -234,10 +228,9 @@ async def import_products(
                 product.car_model     = car_model
                 product.is_available  = is_available
                 product.is_negotiable = is_negotiable
-                product.photos        = json.dumps(photos) if photos else None
+                product.is_reserved   = is_reserved
                 updated += 1
             else:
-                # Create new product
                 product = Product(
                     name=name,
                     description=description or None,
@@ -247,7 +240,7 @@ async def import_products(
                     car_model=car_model,
                     is_available=is_available,
                     is_negotiable=is_negotiable,
-                    photos=json.dumps(photos) if photos else None,
+                    is_reserved=is_reserved,
                 )
                 session.add(product)
                 created += 1
