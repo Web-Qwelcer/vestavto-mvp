@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api'
 import { useAuthStore } from '../../store/auth'
@@ -22,10 +22,14 @@ export default function AdminProductsPage() {
   const [pendingPhotos, setPendingPhotos] = useState<File[]>([])
   const [isImporting, setIsImporting] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showDropdown, setShowDropdown] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const addPhotoInputRef = useRef<HTMLInputElement>(null)
   const importFileRef = useRef<HTMLInputElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const uploadTargetId = useRef<number | null>(null)
 
   const [form, setForm] = useState({
@@ -196,6 +200,36 @@ export default function AdminProductsPage() {
     }
   }
 
+  // Admin search: filter by ID, name, description
+  const filteredProducts = useMemo(() => {
+    if (!products) return []
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return products
+    return products.filter((p: any) =>
+      String(p.id) === q.replace('#', '') ||
+      p.name?.toLowerCase().includes(q) ||
+      (p.description ?? '').toLowerCase().includes(q)
+    )
+  }, [products, searchQuery])
+
+  const suggestions = useMemo(() => {
+    if (!products || !searchQuery.trim()) return []
+    const q = searchQuery.trim().toLowerCase()
+    return (products as any[])
+      .filter((p: any) =>
+        String(p.id) === q.replace('#', '') ||
+        p.name?.toLowerCase().includes(q) ||
+        (p.description ?? '').toLowerCase().includes(q)
+      )
+      .slice(0, 5)
+  }, [products, searchQuery])
+
+  const closeSearch = () => {
+    setShowSearch(false)
+    setSearchQuery('')
+    setShowDropdown(false)
+  }
+
   // Conditional returns after hooks
   if (authLoading) return <div className="p-4 text-center text-ink">Завантаження...</div>
   if (!isManager) return <Navigate to="/" />
@@ -237,7 +271,79 @@ export default function AdminProductsPage() {
           >
             + Додати
           </button>
+
+          {/* Search toggle */}
+          <button
+            onClick={() => {
+              setShowSearch(true)
+              requestAnimationFrame(() => searchInputRef.current?.focus())
+            }}
+            className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg bg-white text-gray-500 hover:text-primary"
+            title="Пошук"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+            </svg>
+          </button>
       </div>
+
+      {/* Search bar (expands below button row) */}
+      {showSearch && (
+        <div className="relative mb-3">
+          <div className="flex gap-2 items-center">
+            <div className="relative flex-1">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+              </svg>
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="#ID або назва товару..."
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setShowDropdown(true) }}
+                onFocus={() => setShowDropdown(true)}
+                onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+                onKeyDown={(e) => e.key === 'Escape' && closeSearch()}
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-xl text-sm bg-white text-ink"
+                autoFocus
+              />
+              {showDropdown && suggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 overflow-hidden">
+                  {suggestions.map((p: any) => (
+                    <button
+                      key={p.id}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { closeSearch(); editProduct(p) }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                    >
+                      <div className="w-8 h-8 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                        {p.photos?.[0]
+                          ? <img src={p.photos[0]} alt="" className="w-full h-full object-cover" />
+                          : <div className="w-full h-full flex items-center justify-center text-gray-300 text-xs">?</div>
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-gray-400 text-xs">#{p.id}</span>
+                        <span className="text-sm text-ink ml-1 truncate">{p.name}</span>
+                      </div>
+                      <span className="text-xs text-primary flex-shrink-0">{p.price} ₴</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={closeSearch}
+              className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg bg-white text-gray-500 hover:text-ink text-base"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Import result banner */}
       {importResult && (
@@ -432,10 +538,12 @@ export default function AdminProductsPage() {
         <div className="text-center py-8 text-gray-500">Завантаження...</div>
       ) : (
         <div className="space-y-2">
-          {(!products || products.length === 0) && (
-            <p className="text-center text-gray-500 py-8">Товарів немає. Додайте перший!</p>
+          {filteredProducts.length === 0 && (
+            <p className="text-center text-gray-500 py-8">
+              {searchQuery.trim() ? 'Нічого не знайдено' : 'Товарів немає. Додайте перший!'}
+            </p>
           )}
-          {products?.map((p: any) => (
+          {filteredProducts.map((p: any) => (
             <div key={p.id} className="card flex gap-3 items-center bg-white">
               {/* Thumbnail — click to upload photo */}
               <div
@@ -458,7 +566,9 @@ export default function AdminProductsPage() {
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm truncate text-ink">{p.name}</div>
+                <div className="font-medium text-sm truncate text-ink">
+                  <span className="text-gray-400 font-normal">#{p.id} •</span> {p.name}
+                </div>
                 <div className="text-xs text-gray-500">
                   {p.price} ₴{p.deposit ? ` • завд. ${p.deposit} ₴` : ''} •{' '}
                   <span className={p.is_available ? 'text-green-600' : 'text-red-500'}>
