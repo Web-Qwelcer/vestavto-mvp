@@ -134,12 +134,12 @@ export default function ProductPage() {
 
         {/* Arrows (visual hint, pointer-events-none so tap zones handle clicks) */}
         {hasMany && photoIdx > 0 && (
-          <div className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center text-xl leading-none pointer-events-none">
+          <div className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center text-2xl leading-none pointer-events-none select-none">
             ‹
           </div>
         )}
         {hasMany && photoIdx < photos.length - 1 && (
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center text-xl leading-none pointer-events-none">
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center text-2xl leading-none pointer-events-none select-none">
             ›
           </div>
         )}

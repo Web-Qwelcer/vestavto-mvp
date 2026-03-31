@@ -249,6 +249,11 @@ export default function AdminProductsPage() {
       .slice(0, 5)
   }, [products, searchQuery])
 
+  const openSearch = () => {
+    setShowSearch(true)
+    requestAnimationFrame(() => searchInputRef.current?.focus())
+  }
+
   const closeSearch = () => {
     setShowSearch(false)
     setSearchQuery('')
@@ -263,60 +268,43 @@ export default function AdminProductsPage() {
     <div className="p-4 text-ink">
       <h1 className="text-xl font-bold text-ink mb-3">Товари</h1>
       <div className="flex items-center gap-2 mb-4">
-          {/* Export */}
-          <button
-            onClick={handleExport}
-            title="Експорт в Excel"
-            className="flex-1 h-9 border border-gray-300 rounded-lg text-xs text-ink bg-white hover:bg-gray-50"
-          >
-            📥 Експорт
-          </button>
-
-          {/* Import */}
-          <button
-            onClick={() => importFileRef.current?.click()}
-            disabled={isImporting}
-            title="Імпорт з Excel"
-            className="flex-1 h-9 border border-gray-300 rounded-lg text-xs text-ink bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            {isImporting ? '...' : '📤 Імпорт'}
-          </button>
-          <input
-            ref={importFileRef}
-            type="file"
-            accept=".xlsx"
-            className="hidden"
-            onChange={handleImportFile}
-          />
-
-          {/* Add */}
-          <button
-            onClick={() => { resetForm(); setShowForm(true) }}
-            className="flex-1 h-9 rounded-lg text-xs font-medium bg-primary text-white hover:bg-blue-700"
-          >
-            + Додати
-          </button>
-
-          {/* Search toggle */}
-          <button
-            onClick={() => {
-              setShowSearch(true)
-              requestAnimationFrame(() => searchInputRef.current?.focus())
-            }}
-            className="flex-1 h-9 flex items-center justify-center border border-gray-300 rounded-lg bg-white text-gray-500 hover:text-primary"
-            title="Пошук"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-            </svg>
-          </button>
-      </div>
-
-      {/* Search bar (expands below button row) */}
-      {showSearch && (
-        <div className="relative mb-3">
-          <div className="flex gap-2 items-center">
+        {!showSearch ? (
+          <>
+            <button
+              onClick={handleExport}
+              title="Експорт в Excel"
+              className="flex-1 h-9 border border-gray-300 rounded-lg text-xs text-ink bg-white hover:bg-gray-50"
+            >
+              📥 Експорт
+            </button>
+            <button
+              onClick={() => importFileRef.current?.click()}
+              disabled={isImporting}
+              title="Імпорт з Excel"
+              className="flex-1 h-9 border border-gray-300 rounded-lg text-xs text-ink bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              {isImporting ? '...' : '📤 Імпорт'}
+            </button>
+            <input ref={importFileRef} type="file" accept=".xlsx" className="hidden" onChange={handleImportFile} />
+            <button
+              onClick={() => { resetForm(); setShowForm(true) }}
+              className="flex-1 h-9 rounded-lg text-xs font-medium bg-primary text-white hover:bg-blue-700"
+            >
+              + Додати
+            </button>
+            <button
+              onClick={openSearch}
+              className="ml-auto w-9 h-9 flex items-center justify-center border border-gray-300 rounded-lg bg-white text-gray-500 hover:text-primary flex-shrink-0"
+              aria-label="Пошук"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+              </svg>
+            </button>
+          </>
+        ) : (
+          <div className="relative flex items-center gap-2 w-full">
             <div className="relative flex-1">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -362,13 +350,14 @@ export default function AdminProductsPage() {
             </div>
             <button
               onClick={closeSearch}
-              className="w-9 h-9 flex items-center justify-center border border-gray-300 rounded-lg bg-white text-gray-500 hover:text-ink text-base flex-shrink-0"
+              className="w-9 h-9 flex items-center justify-center border border-gray-300 rounded-lg bg-white text-gray-500 hover:text-ink flex-shrink-0 leading-none"
+              aria-label="Закрити пошук"
             >
               ✕
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Import result banner */}
       {importResult && (

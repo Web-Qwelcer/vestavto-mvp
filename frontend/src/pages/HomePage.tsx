@@ -224,7 +224,7 @@ export default function HomePage() {
             {/* Close search */}
             <button
               onClick={closeSearch}
-              className="w-9 h-9 flex items-center justify-center text-gray-500 hover:text-ink rounded-xl border border-gray-300 bg-white flex-shrink-0 text-base"
+              className="w-9 h-9 flex items-center justify-center text-gray-500 hover:text-ink rounded-xl border border-gray-300 bg-white flex-shrink-0 leading-none"
               aria-label="Закрити пошук"
             >
               ✕
