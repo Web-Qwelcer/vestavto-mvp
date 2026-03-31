@@ -3,6 +3,7 @@ VestAvto MVP - Database Configuration
 """
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy import text
 from app.models import Base
 import os
 
@@ -29,9 +30,16 @@ async_session_maker = async_sessionmaker(
 
 
 async def init_db():
-    """Створити таблиці"""
+    """Створити таблиці + накатити легкі міграції"""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Add is_negotiable column for existing DBs (idempotent)
+        try:
+            await conn.execute(
+                text("ALTER TABLE products ADD COLUMN is_negotiable BOOLEAN NOT NULL DEFAULT FALSE")
+            )
+        except Exception:
+            pass  # Column already exists — ignore
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

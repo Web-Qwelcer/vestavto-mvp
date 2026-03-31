@@ -14,6 +14,7 @@ interface Product {
   car_model: string
   photos: string[]
   is_available: boolean
+  is_negotiable: boolean
 }
 
 const categories = [
@@ -94,6 +95,16 @@ export default function HomePage() {
       .filter((p) => p.name.toLowerCase().includes(q))
       .slice(0, 5)
   }, [products, searchQuery])
+
+  const handleAskAbout = (id: number, name: string) => () => {
+    const managerUsername = import.meta.env.VITE_MANAGER_USERNAME
+    if (!managerUsername) return
+    const text = encodeURIComponent(`Питання по товару: ${name} (ID: ${id})`)
+    const url = `https://t.me/${managerUsername}?text=${text}`
+    const tg = window.Telegram?.WebApp
+    if (tg?.openTelegramLink) tg.openTelegramLink(url)
+    else window.open(url, '_blank')
+  }
 
   const setFilter = (key: string, value: string) => {
     const newParams = new URLSearchParams(params)
@@ -254,34 +265,50 @@ export default function HomePage() {
 
                 <div className="flex items-end justify-between mt-auto">
                   <div>
-                    <div className="font-bold text-base text-primary leading-tight">
-                      {product.price} ₴
-                    </div>
-                    {product.deposit > 0 && (
-                      <div className="text-xs text-gray-400 leading-tight">
-                        завд. {product.deposit} ₴
-                      </div>
+                    {product.is_negotiable ? (
+                      <div className="text-sm font-medium text-gray-500 leading-tight">Ціна договірна</div>
+                    ) : (
+                      <>
+                        <div className="font-bold text-base text-primary leading-tight">
+                          {product.price} ₴
+                        </div>
+                        {product.deposit > 0 && (
+                          <div className="text-xs text-gray-400 leading-tight">
+                            завд. {product.deposit} ₴
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 
-                  <button
-                    onClick={() =>
-                      addItem({
-                        id: product.id,
-                        name: product.name,
-                        price: product.price,
-                        deposit: product.deposit,
-                        photo: product.photos?.[0],
-                      })
-                    }
-                    className="p-2 bg-primary text-white rounded-xl flex-shrink-0"
-                    title="Додати в кошик"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                  </button>
+                  {product.is_negotiable ? (
+                    <button
+                      onClick={handleAskAbout(product.id, product.name)}
+                      className="p-2 bg-gray-100 text-gray-600 rounded-xl flex-shrink-0 text-base leading-none"
+                      title="Запитати ціну"
+                    >
+                      💬
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() =>
+                        addItem({
+                          id: product.id,
+                          name: product.name,
+                          price: product.price,
+                          deposit: product.deposit,
+                          photo: product.photos?.[0],
+                        })
+                      }
+                      className="p-2 bg-primary text-white rounded-xl flex-shrink-0"
+                      title="Додати в кошик"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

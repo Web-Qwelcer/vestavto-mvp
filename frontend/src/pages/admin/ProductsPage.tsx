@@ -41,6 +41,7 @@ export default function AdminProductsPage() {
     car_model: 'superb_2_pre',
     photos: [] as string[],
     is_available: true,
+    is_negotiable: false,
   })
 
   // ALL hooks before conditional returns
@@ -74,9 +75,9 @@ export default function AdminProductsPage() {
 
   // Single-click atomic save: create/update → upload pending photos
   const handleSave = async () => {
-    if (isSaving || !form.name || !form.price) {
+    if (isSaving || !form.name || (!form.price && !form.is_negotiable)) {
       if (!form.name) alert('Введіть назву товару')
-      else if (!form.price) alert('Введіть ціну')
+      else if (!form.price && !form.is_negotiable) alert('Введіть ціну або позначте "Договірна ціна"')
       return
     }
     setIsSaving(true)
@@ -144,6 +145,7 @@ export default function AdminProductsPage() {
       car_model: 'superb_2_pre',
       photos: [],
       is_available: true,
+      is_negotiable: false,
     })
     setEditId(null)
     setShowForm(false)
@@ -160,6 +162,7 @@ export default function AdminProductsPage() {
       car_model: p.car_model ?? 'superb_2_pre',
       photos: Array.isArray(p.photos) ? p.photos : [],
       is_available: p.is_available ?? true,
+      is_negotiable: p.is_negotiable ?? false,
     })
     setEditId(p.id)
     setShowForm(true)
@@ -388,13 +391,21 @@ export default function AdminProductsPage() {
               className="w-full p-2 border border-gray-300 rounded bg-white text-ink placeholder-gray-400"
               rows={3}
             />
+            <label className="flex items-center gap-2 text-ink cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.is_negotiable}
+                onChange={(e) => setForm({ ...form, is_negotiable: e.target.checked })}
+              />
+              Договірна ціна
+            </label>
             <div className="grid grid-cols-2 gap-2">
               <input
                 type="number"
-                placeholder="Ціна (грн) *"
+                placeholder={form.is_negotiable ? 'Ціна (необов`язково)' : 'Ціна (грн) *'}
                 value={form.price}
                 onChange={(e) => setForm({ ...form, price: e.target.value })}
-                className="p-2 border border-gray-300 rounded bg-white text-ink placeholder-gray-400"
+                className={`p-2 border rounded bg-white text-ink placeholder-gray-400 ${form.is_negotiable ? 'border-gray-200 opacity-60' : 'border-gray-300'}`}
               />
               <input
                 type="number"
@@ -570,7 +581,10 @@ export default function AdminProductsPage() {
                   <span className="text-gray-400 font-normal">#{p.id} •</span> {p.name}
                 </div>
                 <div className="text-xs text-gray-500">
-                  {p.price} ₴{p.deposit ? ` • завд. ${p.deposit} ₴` : ''} •{' '}
+                  {p.is_negotiable
+                    ? <span className="text-gray-400 italic">Договірна</span>
+                    : <>{p.price} ₴{p.deposit ? ` • завд. ${p.deposit} ₴` : ''}</>
+                  }{' '}•{' '}
                   <span className={p.is_available ? 'text-green-600' : 'text-red-500'}>
                     {p.is_available ? '✓ є' : '✗ немає'}
                   </span>
@@ -578,6 +592,20 @@ export default function AdminProductsPage() {
               </div>
 
               <div className="flex gap-3 flex-shrink-0">
+                <button
+                  onClick={() => {
+                    const botUsername = import.meta.env.VITE_BOT_USERNAME || 'vestavto_client_bot'
+                    const url = `https://t.me/${botUsername}/shop?startapp=product_${p.id}`
+                    navigator.clipboard.writeText(url).then(
+                      () => alert('Посилання скопійовано!'),
+                      () => alert(url)
+                    )
+                  }}
+                  className="text-gray-400 hover:text-primary text-sm"
+                  title="Копіювати посилання"
+                >
+                  🔗
+                </button>
                 <button onClick={() => editProduct(p)} className="text-blue-600 text-sm font-medium">
                   Ред.
                 </button>

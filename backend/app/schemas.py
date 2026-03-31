@@ -40,12 +40,13 @@ class UserInfo(BaseModel):
 class ProductBase(BaseModel):
     name: str
     description: Optional[str] = None
-    price: float = Field(gt=0)
+    price: float = Field(ge=0, default=0)
     deposit: float = Field(ge=0, default=0)
     category: Category
     car_model: CarModel
     photos: Optional[List[str]] = None
     is_available: bool = True
+    is_negotiable: bool = False
 
 
 class ProductCreate(ProductBase):
@@ -55,12 +56,13 @@ class ProductCreate(ProductBase):
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    price: Optional[float] = Field(gt=0, default=None)
+    price: Optional[float] = Field(ge=0, default=None)
     deposit: Optional[float] = Field(ge=0, default=None)
     category: Optional[Category] = None
     car_model: Optional[CarModel] = None
     photos: Optional[List[str]] = None
     is_available: Optional[bool] = None
+    is_negotiable: Optional[bool] = None
 
 
 class ProductResponse(ProductBase):

@@ -83,7 +83,7 @@ async def export_products(
 
     # Header row
     headers = ["id", "name", "description", "price", "deposit",
-               "category", "car_model", "in_stock", "photos"]
+               "category", "car_model", "in_stock", "photos", "is_negotiable"]
     ws.append(headers)
 
     # Style header
@@ -93,7 +93,7 @@ async def export_products(
         cell.fill = header_fill
         cell.alignment = Alignment(horizontal="center")
         ws.column_dimensions[cell.column_letter].width = [
-            6, 35, 50, 10, 10, 16, 16, 10, 60
+            6, 35, 50, 10, 10, 16, 16, 10, 60, 14
         ][col - 1]
 
     # Data rows
@@ -114,6 +114,7 @@ async def export_products(
             p.car_model.value if p.car_model else "",
             "true" if p.is_available else "false",
             ", ".join(photos),
+            "true" if p.is_negotiable else "false",
         ])
 
     buf = io.BytesIO()
@@ -163,14 +164,18 @@ async def import_products(
             deposit      = float(row[4] or 0)         if len(row) > 4 else 0.0
             category_val = str(row[5] or "other").strip().lower() if len(row) > 5 else "other"
             car_val      = str(row[6] or "other").strip().lower() if len(row) > 6 else "other"
-            in_stock_val = str(row[7] or "true").strip().lower()  if len(row) > 7 else "true"
-            photos_str   = str(row[8] or "").strip()              if len(row) > 8 else ""
+            in_stock_val     = str(row[7] or "true").strip().lower()  if len(row) > 7 else "true"
+            photos_str       = str(row[8] or "").strip()              if len(row) > 8 else ""
+            negotiable_val   = str(row[9] or "false").strip().lower() if len(row) > 9 else "false"
 
             if not name:
                 errors.append({"row": row_idx, "error": "Назва товару обов'язкова"})
                 continue
-            if price <= 0:
-                errors.append({"row": row_idx, "error": "Ціна має бути більше 0"})
+
+            is_negotiable = negotiable_val in ("true", "1", "yes", "так")
+
+            if price <= 0 and not is_negotiable:
+                errors.append({"row": row_idx, "error": "Ціна має бути більше 0 (або встановіть is_negotiable=true)"})
                 continue
 
             try:
@@ -205,28 +210,30 @@ async def import_products(
                         existing_photos = []
 
                 changed = (
-                    product.name         != name
+                    product.name           != name
                     or (product.description or "") != (description or "")
-                    or product.price        != price
-                    or product.deposit      != deposit
-                    or product.category     != category
-                    or product.car_model    != car_model
-                    or product.is_available != is_available
-                    or existing_photos      != photos
+                    or product.price          != price
+                    or product.deposit        != deposit
+                    or product.category       != category
+                    or product.car_model      != car_model
+                    or product.is_available   != is_available
+                    or product.is_negotiable  != is_negotiable
+                    or existing_photos        != photos
                 )
 
                 if not changed:
                     skipped += 1
                     continue
 
-                product.name         = name
-                product.description  = description or None
-                product.price        = price
-                product.deposit      = deposit
-                product.category     = category
-                product.car_model    = car_model
-                product.is_available = is_available
-                product.photos       = json.dumps(photos) if photos else None
+                product.name          = name
+                product.description   = description or None
+                product.price         = price
+                product.deposit       = deposit
+                product.category      = category
+                product.car_model     = car_model
+                product.is_available  = is_available
+                product.is_negotiable = is_negotiable
+                product.photos        = json.dumps(photos) if photos else None
                 updated += 1
             else:
                 # Create new product
@@ -238,6 +245,7 @@ async def import_products(
                     category=category,
                     car_model=car_model,
                     is_available=is_available,
+                    is_negotiable=is_negotiable,
                     photos=json.dumps(photos) if photos else None,
                 )
                 session.add(product)
@@ -283,7 +291,8 @@ async def create_product(
         category=data.category,
         car_model=data.car_model,
         photos=json.dumps(data.photos) if data.photos else None,
-        is_available=data.is_available
+        is_available=data.is_available,
+        is_negotiable=data.is_negotiable,
     )
     session.add(product)
     await session.flush()

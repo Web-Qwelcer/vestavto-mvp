@@ -83,6 +83,7 @@ export default function ProductPage() {
 
   const categoryLabel = CATEGORY_LABELS[product.category] ?? product.category
   const carLabel = CAR_LABELS[product.car_model] ?? product.car_model
+  const isNegotiable: boolean = !!product.is_negotiable
 
   return (
     <div className="pb-52">
@@ -172,9 +173,15 @@ export default function ProductPage() {
 
         {/* Price */}
         <div className="flex items-baseline gap-3 mb-4">
-          <span className="text-3xl font-bold text-primary">{product.price} ₴</span>
-          {product.deposit > 0 && (
-            <span className="text-sm text-gray-400">завдаток {product.deposit} ₴</span>
+          {isNegotiable ? (
+            <span className="text-2xl font-bold text-gray-500">Ціна договірна</span>
+          ) : (
+            <>
+              <span className="text-3xl font-bold text-primary">{product.price} ₴</span>
+              {product.deposit > 0 && (
+                <span className="text-sm text-gray-400">завдаток {product.deposit} ₴</span>
+              )}
+            </>
           )}
         </div>
 
@@ -198,16 +205,28 @@ export default function ProductPage() {
 
       {/* Fixed bottom buttons */}
       <div className="fixed bottom-16 left-0 right-0 p-4 bg-white border-t border-gray-100 space-y-2">
-        <button onClick={handleAddToCart} className="btn-primary w-full py-3">
-          Додати в кошик
-        </button>
-        {import.meta.env.VITE_MANAGER_USERNAME && (
-          <button
-            onClick={handleAskQuestion}
-            className="w-full py-3 rounded-xl font-medium border border-gray-300 bg-white text-ink hover:bg-gray-50 transition-colors"
-          >
-            💬 Запитати про товар
+        {isNegotiable ? (
+          <button onClick={handleAskQuestion} className="btn-primary w-full py-3">
+            💬 Запитати ціну
           </button>
+        ) : (
+          <>
+            <button
+              onClick={handleAddToCart}
+              disabled={!product.is_available}
+              className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {product.is_available ? 'Додати в кошик' : 'Немає в наявності'}
+            </button>
+            {import.meta.env.VITE_MANAGER_USERNAME && (
+              <button
+                onClick={handleAskQuestion}
+                className="w-full py-3 rounded-xl font-medium border border-gray-300 bg-white text-ink hover:bg-gray-50 transition-colors"
+              >
+                💬 Запитати про товар
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

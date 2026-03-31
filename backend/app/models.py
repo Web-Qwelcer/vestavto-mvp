@@ -117,6 +117,7 @@ class Product(Base):
     photos: Mapped[Optional[str]] = mapped_column(Text)  # JSON array of URLs
     
     is_available: Mapped[bool] = mapped_column(default=True)
+    is_negotiable: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
     
