@@ -216,12 +216,8 @@ export default function ProductPage() {
                 Продано
               </button>
             ) : (
-              <button
-                onClick={handleAddToCart}
-                disabled={product.is_reserved}
-                className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {product.is_reserved ? 'Заброньовано' : 'Додати в кошик'}
+              <button onClick={handleAddToCart} className="btn-primary w-full py-3">
+                Додати в кошик
               </button>
             )}
             {import.meta.env.VITE_MANAGER_USERNAME && (
