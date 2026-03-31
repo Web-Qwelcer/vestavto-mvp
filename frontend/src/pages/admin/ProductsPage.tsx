@@ -84,8 +84,8 @@ export default function AdminProductsPage() {
     try {
       const data = {
         ...form,
-        price: parseFloat(form.price),
-        deposit: parseFloat(form.deposit) || 0,
+        price: form.is_negotiable ? 0 : (parseFloat(form.price) || 0),
+        deposit: form.is_negotiable ? 0 : (parseFloat(form.deposit) || 0),
       }
       let productId: number
       if (editId) {
@@ -101,7 +101,15 @@ export default function AdminProductsPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-products'] })
       resetForm()
     } catch (err: any) {
-      alert(err?.response?.data?.detail || 'Помилка збереження')
+      const detail = err?.response?.data?.detail
+      const msg = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((e: any) => e?.msg ?? JSON.stringify(e)).join('; ')
+          : detail
+            ? JSON.stringify(detail)
+            : 'Помилка збереження'
+      alert(msg)
     } finally {
       setIsSaving(false)
     }
@@ -395,26 +403,28 @@ export default function AdminProductsPage() {
               <input
                 type="checkbox"
                 checked={form.is_negotiable}
-                onChange={(e) => setForm({ ...form, is_negotiable: e.target.checked })}
+                onChange={(e) => setForm({ ...form, is_negotiable: e.target.checked, price: '', deposit: '' })}
               />
               Договірна ціна
             </label>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="number"
-                placeholder={form.is_negotiable ? 'Ціна (необов`язково)' : 'Ціна (грн) *'}
-                value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
-                className={`p-2 border rounded bg-white text-ink placeholder-gray-400 ${form.is_negotiable ? 'border-gray-200 opacity-60' : 'border-gray-300'}`}
-              />
-              <input
-                type="number"
-                placeholder="Завдаток (грн)"
-                value={form.deposit}
-                onChange={(e) => setForm({ ...form, deposit: e.target.value })}
-                className="p-2 border border-gray-300 rounded bg-white text-ink placeholder-gray-400"
-              />
-            </div>
+            {!form.is_negotiable && (
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="number"
+                  placeholder="Ціна (грн) *"
+                  value={form.price}
+                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                  className="p-2 border border-gray-300 rounded bg-white text-ink placeholder-gray-400"
+                />
+                <input
+                  type="number"
+                  placeholder="Завдаток (грн)"
+                  value={form.deposit}
+                  onChange={(e) => setForm({ ...form, deposit: e.target.value })}
+                  className="p-2 border border-gray-300 rounded bg-white text-ink placeholder-gray-400"
+                />
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <select
                 value={form.category}
