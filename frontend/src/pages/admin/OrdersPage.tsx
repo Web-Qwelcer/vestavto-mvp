@@ -227,10 +227,9 @@ export default function AdminOrdersPage() {
                       {order.items.map((item: any) => (
                         <div key={item.id} className="flex justify-between items-baseline text-xs">
                           <span className="text-ink flex-1 min-w-0 truncate pr-2">
+                            <span className="text-gray-400">#{item.product_id} •</span>{' '}
                             {item.product_name}
-                            {item.quantity > 1 && (
-                              <span className="text-gray-400"> ×{item.quantity}</span>
-                            )}
+                            <span className="text-gray-400"> ×{item.quantity}</span>
                           </span>
                           <span className="text-gray-600 flex-shrink-0">{item.price * item.quantity} ₴</span>
                         </div>
