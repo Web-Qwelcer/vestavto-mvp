@@ -46,6 +46,7 @@ class ProductBase(BaseModel):
     car_model: CarModel
     photos: Optional[List[str]] = None
     is_available: bool = True
+    is_reserved: bool = False
     is_negotiable: bool = False
 
 
@@ -62,6 +63,7 @@ class ProductUpdate(BaseModel):
     car_model: Optional[CarModel] = None
     photos: Optional[List[str]] = None
     is_available: Optional[bool] = None
+    is_reserved: Optional[bool] = None
     is_negotiable: Optional[bool] = None
 
 

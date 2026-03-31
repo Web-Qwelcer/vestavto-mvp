@@ -211,13 +211,19 @@ export default function ProductPage() {
           </button>
         ) : (
           <>
-            <button
-              onClick={handleAddToCart}
-              disabled={!product.is_available}
-              className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {product.is_available ? 'Додати в кошик' : 'Немає в наявності'}
-            </button>
+            {!product.is_available ? (
+              <button disabled className="w-full py-3 rounded-xl font-medium bg-gray-200 text-gray-500 cursor-not-allowed">
+                Продано
+              </button>
+            ) : (
+              <button
+                onClick={handleAddToCart}
+                disabled={product.is_reserved}
+                className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {product.is_reserved ? 'Заброньовано' : 'Додати в кошик'}
+              </button>
+            )}
             {import.meta.env.VITE_MANAGER_USERNAME && (
               <button
                 onClick={handleAskQuestion}

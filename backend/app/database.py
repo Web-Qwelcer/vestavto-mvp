@@ -33,13 +33,28 @@ async def init_db():
     """Створити таблиці + накатити легкі міграції"""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Add is_negotiable column for existing DBs (idempotent)
+
+    # Each migration in its own transaction so a failed ALTER (column exists)
+    # does not abort subsequent migrations — critical for PostgreSQL.
+    migrations = [
+        "ALTER TABLE products ADD COLUMN is_negotiable BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE products ADD COLUMN is_reserved BOOLEAN DEFAULT FALSE",
+    ]
+    for sql in migrations:
         try:
-            await conn.execute(
-                text("ALTER TABLE products ADD COLUMN is_negotiable BOOLEAN NOT NULL DEFAULT FALSE")
-            )
+            async with engine.begin() as conn:
+                await conn.execute(text(sql))
         except Exception:
-            pass  # Column already exists — ignore
+            pass  # Column already exists — OK
+
+    # Fill NULLs separately, after ALTER is guaranteed to have run
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("UPDATE products SET is_reserved = FALSE WHERE is_reserved IS NULL")
+            )
+    except Exception:
+        pass
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

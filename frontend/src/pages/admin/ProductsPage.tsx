@@ -41,6 +41,7 @@ export default function AdminProductsPage() {
     car_model: 'superb_2_pre',
     photos: [] as string[],
     is_available: true,
+    is_reserved: false,
     is_negotiable: false,
   })
 
@@ -152,6 +153,7 @@ export default function AdminProductsPage() {
       car_model: 'superb_2_pre',
       photos: [],
       is_available: true,
+      is_reserved: false,
       is_negotiable: false,
     })
     setEditId(null)
@@ -169,11 +171,24 @@ export default function AdminProductsPage() {
       car_model: p.car_model ?? 'superb_2_pre',
       photos: Array.isArray(p.photos) ? p.photos : [],
       is_available: p.is_available ?? true,
+      is_reserved: p.is_reserved ?? false,
       is_negotiable: p.is_negotiable ?? false,
     })
     setEditId(p.id)
     setShowForm(true)
     setPendingPhotos([])
+  }
+
+  const getStatusValue = () => {
+    if (!form.is_available) return 'sold'
+    if (form.is_reserved) return 'reserved'
+    return 'available'
+  }
+
+  const handleStatusChange = (status: string) => {
+    if (status === 'available') setForm((f) => ({ ...f, is_available: true, is_reserved: false }))
+    else if (status === 'reserved') setForm((f) => ({ ...f, is_available: true, is_reserved: true }))
+    else setForm((f) => ({ ...f, is_available: false, is_reserved: false }))
   }
 
   const removeExistingPhoto = (index: number) => {
@@ -402,7 +417,22 @@ export default function AdminProductsPage() {
               <input
                 type="checkbox"
                 checked={form.is_negotiable}
-                onChange={(e) => setForm({ ...form, is_negotiable: e.target.checked, price: '', deposit: '' })}
+                onChange={(e) => {
+                  const checked = e.target.checked
+                  if (!checked) {
+                    const reserve = confirm('Забронювати товар для клієнта?')
+                    setForm((f) => ({
+                      ...f,
+                      is_negotiable: false,
+                      price: '',
+                      deposit: '',
+                      is_available: true,
+                      is_reserved: reserve,
+                    }))
+                  } else {
+                    setForm((f) => ({ ...f, is_negotiable: true, price: '', deposit: '' }))
+                  }
+                }}
               />
               Договірна ціна
             </label>
@@ -452,14 +482,18 @@ export default function AdminProductsPage() {
                 <option value="other">Інше</option>
               </select>
             </div>
-            <label className="flex items-center gap-2 text-ink cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.is_available}
-                onChange={(e) => setForm({ ...form, is_available: e.target.checked })}
-              />
-              В наявності
-            </label>
+            <div>
+              <label className="text-sm text-gray-600 mb-1 block">Статус товару</label>
+              <select
+                value={getStatusValue()}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded bg-white text-ink"
+              >
+                <option value="available">В наявності</option>
+                <option value="reserved">Заброньовано</option>
+                <option value="sold">Продано</option>
+              </select>
+            </div>
 
             {/* Photo section */}
             <div>
@@ -594,9 +628,12 @@ export default function AdminProductsPage() {
                     ? <span className="text-gray-400 italic">Договірна</span>
                     : <>{p.price} ₴{p.deposit ? ` • завд. ${p.deposit} ₴` : ''}</>
                   }{' '}•{' '}
-                  <span className={p.is_available ? 'text-green-600' : 'text-red-500'}>
-                    {p.is_available ? '✓ є' : '✗ немає'}
-                  </span>
+                  {!p.is_available
+                    ? <span className="text-red-500">Продано</span>
+                    : p.is_reserved
+                      ? <span className="text-orange-500">Заброньовано</span>
+                      : <span className="text-green-600">В наявності</span>
+                  }
                 </div>
               </div>
 

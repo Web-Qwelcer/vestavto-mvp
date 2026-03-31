@@ -8,7 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ async def get_products(
         conditions.append(Product.car_model == car_model)
     if available_only:
         conditions.append(Product.is_available == True)
+        conditions.append(or_(Product.is_reserved == False, Product.is_reserved.is_(None)))
     
     if conditions:
         query = query.where(and_(*conditions))
