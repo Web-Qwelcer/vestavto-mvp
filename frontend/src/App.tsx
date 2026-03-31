@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useAuthStore } from './store/auth'
 import Layout from './components/Layout'
 import HomePage from './pages/HomePage'
@@ -15,13 +15,16 @@ import AdminOrdersPage from './pages/admin/OrdersPage'
 
 function StartParamHandler() {
   const navigate = useNavigate()
+  const handled = useRef(false)
   useEffect(() => {
+    if (handled.current) return
+    handled.current = true
     const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param
     if (startParam?.startsWith('product_')) {
       const productId = startParam.replace('product_', '')
-      navigate(`/product/${productId}`)
+      navigate(`/product/${productId}`, { replace: true })
     }
-  }, [navigate])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return null
 }
 
