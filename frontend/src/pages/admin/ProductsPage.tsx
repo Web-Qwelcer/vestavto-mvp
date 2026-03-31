@@ -75,18 +75,17 @@ export default function AdminProductsPage() {
 
   // Single-click atomic save: create/update → upload pending photos
   const handleSave = async () => {
-    if (isSaving || !form.name || (!form.price && !form.is_negotiable)) {
-      if (!form.name) alert('Введіть назву товару')
-      else if (!form.price && !form.is_negotiable) alert('Введіть ціну або позначте "Договірна ціна"')
+    if (isSaving) return
+    if (!form.name) { alert('Введіть назву товару'); return }
+    if (!form.is_negotiable && !(parseFloat(form.price) > 0)) {
+      alert('Введіть ціну більше 0 або позначте "Договірна ціна"')
       return
     }
     setIsSaving(true)
     try {
-      const data = {
-        ...form,
-        price: form.is_negotiable ? 0 : (parseFloat(form.price) || 0),
-        deposit: form.is_negotiable ? 0 : (parseFloat(form.deposit) || 0),
-      }
+      const price   = form.is_negotiable ? 0 : parseFloat(form.price)
+      const deposit = form.is_negotiable ? 0 : (parseFloat(form.deposit) || 0)
+      const data = { ...form, price, deposit }
       let productId: number
       if (editId) {
         await api.put(`/products/${editId}`, data)
