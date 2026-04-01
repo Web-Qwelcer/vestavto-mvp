@@ -1,3 +1,4 @@
+// Vercel deploy trigger
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import { useAuthStore } from './store/auth'
