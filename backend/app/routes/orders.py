@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import get_session
-from app.models import Order, OrderItem, Product, Client, OrderStatus, PaymentType, UserRole
+from app.models import Order, OrderItem, Product, OrderStatus, PaymentType, UserRole
 from app.schemas import (
     OrderCreate, OrderResponse, OrderItemResponse,
     OrderStatusUpdate, OrderContactUpdate, UserInfo
@@ -95,11 +95,6 @@ async def _create_order_inner(
     else:
         pay_amount = total
     
-    # Отримуємо source клієнта для копіювання в замовлення
-    client_result = await session.execute(select(Client).where(Client.id == user.id))
-    client_obj = client_result.scalar_one_or_none()
-    client_source = client_obj.source if client_obj else None
-
     # Створюємо замовлення
     order = Order(
         client_id=user.id,
@@ -113,7 +108,7 @@ async def _create_order_inner(
         np_city_name=data.np_city_name,
         np_warehouse_ref=data.np_warehouse_ref,
         np_warehouse_name=data.np_warehouse_name,
-        source=client_source,
+        source=data.source,
     )
     order.items = order_items
     

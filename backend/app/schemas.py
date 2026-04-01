@@ -145,6 +145,7 @@ class OrderCreate(BaseModel):
     np_city_name: str
     np_warehouse_ref: str
     np_warehouse_name: str
+    source: Optional[str] = None  # Traffic source from current session
 
 
 class OrderResponse(BaseModel):

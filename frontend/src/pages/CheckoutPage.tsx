@@ -3,6 +3,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import { useCartStore } from '../store/cart'
+import { useAuthStore } from '../store/auth'
+import { parseSource } from '../botMode'
 
 // ── Validation helpers ──────────────────────────────────────────────────────
 
@@ -80,6 +82,10 @@ export default function CheckoutPage() {
   // Create order
   const createOrder = useMutation({
     mutationFn: async () => {
+      const { botMode } = useAuthStore.getState()
+      const source = botMode === 'client'
+        ? parseSource(window.Telegram?.WebApp?.initDataUnsafe?.start_param ?? '')
+        : null
       const res = await api.post('/orders', {
         items: items.map(i => ({ product_id: i.id, quantity: i.quantity })),
         payment_type: form.payment_type,
@@ -88,7 +94,8 @@ export default function CheckoutPage() {
         np_city_ref: form.np_city_ref,
         np_city_name: form.np_city_name,
         np_warehouse_ref: form.np_warehouse_ref,
-        np_warehouse_name: form.np_warehouse_name
+        np_warehouse_name: form.np_warehouse_name,
+        source,
       })
       return res.data
     },

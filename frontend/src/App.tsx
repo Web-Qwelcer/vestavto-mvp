@@ -2,6 +2,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import { useAuthStore } from './store/auth'
+import { parseSource } from './botMode'
 import Layout from './components/Layout'
 import Toast from './components/Toast'
 import HomePage from './pages/HomePage'
@@ -15,16 +16,6 @@ import OrderPage from './pages/OrderPage'
 import AdminProductsPage from './pages/admin/ProductsPage'
 import AdminOrdersPage from './pages/admin/OrdersPage'
 import AdminAnalyticsPage from './pages/admin/AnalyticsPage'
-
-// "product_25"      → "product_deeplink"
-// "src_facebook_may" → "facebook_may"
-// "" / undefined    → "direct"
-function parseSource(startParam: string): string {
-  if (!startParam) return 'direct'
-  if (startParam.startsWith('product_')) return 'product_deeplink'
-  if (startParam.startsWith('src_')) return startParam.slice(4)
-  return startParam
-}
 
 function IndexRoute() {
   const botMode = useAuthStore((s) => s.botMode)
