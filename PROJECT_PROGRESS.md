@@ -1,6 +1,6 @@
 # VestAvto MVP — Project Progress
 
-> Документ сгенеровано на основі аналізу реального коду. Остання дата: 2026-03-27.
+> Останнє оновлення: 2026-04-01
 
 ---
 
@@ -13,188 +13,219 @@ vestavto-mvp/
 │   │   ├── routes/       auth, products, orders, payments, delivery
 │   │   ├── services/     monobank, novaposhta, telegram_notify, cloudinary_service
 │   │   ├── models.py     SQLAlchemy ORM: Manager, Client, Product, Order, OrderItem, Payment
-│   │   ├── schemas.py    Pydantic: request/response моделі
+│   │   ├── schemas.py    Pydantic v2: request/response моделі
 │   │   ├── auth.py       Telegram initData HMAC-SHA256 + JWT
-│   │   ├── database.py   AsyncEngine + session dependency
-│   │   └── admin.py      SQLAdmin панель (Manager/Client/Product/Order/Payment)
-│   ├── main.py           FastAPI app, CORS, lifespan, маршрути
+│   │   ├── database.py   AsyncEngine + per-migration transactions
+│   │   └── admin.py      SQLAdmin панель
+│   ├── main.py
 │   ├── Dockerfile
 │   └── requirements.txt
 │
 ├── frontend/             React 18 + TypeScript + Vite + Tailwind CSS
 │   └── src/
 │       ├── pages/
-│       │   ├── HomePage.tsx        Каталог з фільтрами
-│       │   ├── ProductPage.tsx     Деталі + carousel
-│       │   ├── CartPage.tsx        Кошик
-│       │   ├── CheckoutPage.tsx    Оформлення + оплата
-│       │   ├── OrdersPage.tsx      Мої замовлення
-│       │   ├── OrderPage.tsx       Деталі замовлення + трекінг
+│       │   ├── HomePage.tsx          Каталог з фільтрами + inline пошук
+│       │   ├── ProductPage.tsx       Деталі + carousel + deep link target
+│       │   ├── CartPage.tsx          Кошик
+│       │   ├── CheckoutPage.tsx      Оформлення + НП + оплата
+│       │   ├── OrdersPage.tsx        Мої замовлення
+│       │   ├── OrderPage.tsx         Деталі замовлення + трекінг
 │       │   └── admin/
-│       │       ├── ProductsPage.tsx  Менеджер: CRUD товарів + фото
-│       │       └── OrdersPage.tsx    Менеджер: управління замовленнями
+│       │       ├── ProductsPage.tsx  CRUD товарів + full-screen modal + inline пошук
+│       │       └── OrdersPage.tsx    Управління замовленнями
 │       ├── store/
 │       │   ├── auth.ts    Zustand (persists: token + isManager)
-│       │   └── cart.ts    Zustand (persists: items)
+│       │   ├── cart.ts    Zustand (persists: items)
+│       │   └── toast.ts   Zustand (in-app toast notifications)
 │       ├── components/
-│       │   └── Layout.tsx Header + nav + outlet
-│       └── api.ts         Axios instance + auth interceptor
+│       │   ├── Layout.tsx  Header + nav + outlet
+│       │   └── Toast.tsx   In-app toast (success/error/info, 2.8s auto-hide)
+│       └── api.ts          Axios instance + auth interceptor
 │
-├── render.yaml           Backend: Render.com Docker + PostgreSQL free tier
-└── docker-compose.yml    Local dev: backend + PostgreSQL + frontend
+├── render.yaml           Backend: Render.com Docker + PostgreSQL
+└── docker-compose.yml    Local dev
 ```
 
 ---
 
-## Що реально працює (на основі коду)
+## ✅ Реалізовано
 
-### ✅ Авторизація
-- Telegram initData HMAC-SHA256 валідація (`app/auth.py`)
-- Підтримка **двох** bot токенів: `TELEGRAM_CLIENT_BOT_TOKEN` + `TELEGRAM_MANAGER_BOT_TOKEN`
+### Авторизація
+- Telegram initData HMAC-SHA256 валідація
+- Два bot токени: `TELEGRAM_CLIENT_BOT_TOKEN` + `TELEGRAM_MANAGER_BOT_TOKEN`
 - JWT 7 днів, persisted у Zustand localStorage
 - Ролі: `client`, `manager`, `director`
-- `GET /auth/me` — повертає поточного user + role
 - auth_date перевіряється (не старше 24 год)
 
-### ✅ Каталог товарів
-- `GET /products` — фільтрація за `category`, `car_model`, `available_only`
-- `GET /products/{id}` — деталі
-- `GET /products/categories/list` + `GET /products/cars/list` — довідники
-- Frontend: grid каталог, фільтри, перехід на деталі
-- Фото: JSON масив URL, парситься Pydantic validator
+### Каталог товарів
+- Фільтрація за `category`, `car_model`, `available_only`
+- Пошук inline: autocomplete dropdown, відкривається від лупи (замінює кнопки)
+- Публічний каталог не показує `is_reserved=true` і `is_available=false` товари
+- Deep link: `t.me/vestavto_client_bot/shop?startapp=product_XX` → відкриває ProductPage
 
-### ✅ Кошик
-- Zustand store з localStorage persistence
+### Товар — статуси (is_available + is_reserved)
+- **В наявності** (`is_available=true, is_reserved=false`) — видно в каталозі, можна купити
+- **Заброньовано** (`is_available=true, is_reserved=true`) — приховано з каталогу, доступно по прямому посиланню (deep link)
+- **Продано** (`is_available=false`) — показується сіра кнопка "Продано"
+
+### Договірна ціна (is_negotiable)
+- Чекбокс у формі адмінки, ховає поля ціни/завдатку
+- В каталозі показує "Ціна договірна"
+- На ProductPage показує кнопку "💬 Запитати ціну" → Telegram DM до менеджера
+- Excel export/import підтримує поле
+
+### Кошик
+- Zustand + localStorage persistence
 - addItem / removeItem / updateQuantity / clearCart
-- Показує суму + мінімальний завдаток
+- Toast "Додано в кошик" при додаванні
 
-### ✅ Checkout + Оплата (Monobank)
-- `POST /orders` — створює замовлення, резервує товари (is_available = false)
-- `POST /payments/create` — створює Monobank invoice (завдаток або повна сума)
-- `POST /payments/webhook` — Monobank callback:
-  - Записує Payment
-  - Оновлює `order.paid_amount`
-  - Background task: `create_ttn_for_order`
-  - Надсилає Telegram сповіщення менеджеру
-- `POST /payments/{id}/verify` — ручна верифікація (manager only)
-- Відкриває payment URL через `Telegram.WebApp.openLink()` або `window.open()`
+### Checkout + Oплата (Monobank)
+- Валідація: ім'я (2+ слова), телефон (10 цифр)
+- Nova Poshta autocomplete: міста + відділення
+- Тип оплати: завдаток або повна
+- POST /orders → POST /payments/create → openLink (Monobank)
+- Monobank webhook: ECDSA підпис верифікується через public key API
 
-### ✅ Nova Poshta — Доставка
-- `GET /delivery/cities?query=` — пошук міст
-- `GET /delivery/warehouses?city_ref=&search=` — відділення
-- `POST /delivery/{id}/create-ttn` — ручне створення ТТН (manager)
-- `GET /delivery/{id}/track` — статус ТТН + автооновлення `order.status`
-- `DELETE /delivery/{id}/ttn` — видалення ТТН
+### Nova Poshta — Доставка
+- Пошук міст + відділень (autocomplete)
+- Ручне та автоматичне (після webhook) створення ТТН
+- Трекінг статусу ТТН
 - BackwardDeliveryData (накладений платіж) для DEPOSIT_PAID замовлень
-- `create_ttn_for_order` — автоматично після оплати (background task)
 
-### ✅ Управління товарами (менеджер)
-- CRUD: `POST/PUT/DELETE /products` (manager only)
-- `POST /products/{id}/upload-image` — upload в Cloudinary (async via asyncio.to_thread)
-- Форма: назва, опис, ціна, завдаток, категорія, авто, is_available
-- Фото у формі: перегляд існуючих, видалення (кнопка ✕), додавання нових
-- Atomic save: create → upload фото → одна кнопка, один процес
-- Thumbnail click на item в списку → upload фото (multiple)
+### Управління товарами (менеджер)
+- CRUD: POST/PUT/DELETE (manager only)
+- Full-screen modal форма (не треба скролити)
+- Inline пошук (замінює рядок кнопок, як у магазині)
+- Dropdown статусів: В наявності / Заброньовано / Продано
+- Кнопка 🔗 копіює deep link товару в буфер обміну
+- Фото: Cloudinary upload, перегляд, видалення, atomic save
+- Excel: export (id/name/desc/price/deposit/category/car_model/is_available/is_negotiable/is_reserved), import з id-or-name lookup
 
-### ✅ Управління замовленнями (менеджер)
-- `PATCH /orders/{id}/status` — оновити статус
-  - При `cancelled` → повертає товари в наявність
-  - При `paid/deposit_paid` → тригерить create_ttn background task
-  - Зберігає timestamps: `paid_at`, `shipped_at`, `delivered_at`
-- Status dropdown з українськими назвами
-- Кнопка "Створити ТТН" для paid/deposit_paid замовлень
+### Управління замовленнями (менеджер)
+- Статус dropdown з українськими назвами
+- Розгорнуті картки з позиціями товарів (ID + назва + кількість)
+- Редагування контактних даних (до створення ТТН)
+- Ручне створення ТТН
 
-### ✅ Telegram сповіщення
-- Нове замовлення → notification менеджеру
-- Успішна оплата → notification менеджеру
-- Помилка створення ТТН → error notification менеджеру
-- `TELEGRAM_MANAGER_CHAT_IDS` — кома-розділений список (кілька менеджерів)
-- parse_mode: HTML
+### Telegram сповіщення
+- Нове замовлення → менеджеру
+- Успішна оплата → менеджеру + клієнту
+- ТТН створено → клієнту
+- Помилка ТТН → менеджеру
+- `TELEGRAM_MANAGER_CHAT_IDS` — кілька менеджерів
 
-### ✅ Cloudinary
-- Upload фото через `cloudinary.uploader.upload()`
-- Папка: `vestavto/products`
-- Трансформація: 1200×1200 limit + quality auto:good
-- Лазі import (`from app.services.cloudinary_service import upload_image` всередині функції)
+### Toast повідомлення (замість alert)
+- Компонент `Toast.tsx` — фіксований внизу, fade in/out, 2.8 сек
+- success / error / info типи
+- Замінено всі `alert()` в AdminProductsPage та AdminOrdersPage
+- "Додано в кошик", "Товар збережено", "Статус оновлено", "ТТН створено" тощо
 
-### ✅ SQLAdmin панель
-- `/admin` — логін username/password
-- CRUD для: Manager, Client, Product, Order, Payment
-- Конфігурація `form_columns` (замість `form_excluded_columns`) для сумісності sqladmin 0.16+
+### Security
+- Monobank webhook: ECDSA signature verification (cryptography lib)
+- Публічний ключ кешується в пам'яті, отримується від `api.monobank.ua/api/merchant/pubkey`
+- Невалідний підпис → 400 + лог з IP
+- JWT_SECRET обов'язковий env var
+- Telegram initData HMAC-SHA256
 
-### ✅ Frontend — ProductPage Carousel
-- Touch swipe (ліво/право, поріг 50px)
-- Стрілки ‹ › (видимі тільки якщо є куди гортати)
-- Dot-індикатори з click-to-jump
-- Лічильник `1/N` у правому верхньому куті
+### Deep links
+- Формат: `https://t.me/vestavto_client_bot/shop?startapp=product_25`
+- `StartParamHandler` в App.tsx читає `initDataUnsafe.start_param` один раз при mount
+- `useRef` флаг — navigate тільки раз, не блокує подальшу навігацію
+- `replace: true` — back button веде на головну
 
-### ✅ OrderPage — Кнопка оплати
-- Показується якщо `status === 'new' || 'pending_payment'`
-- Обраховує суму: завдаток або залишок (total - paid)
-- `Telegram.WebApp.openLink()` з `window.open` fallback
+### Cloudinary
+- Upload фото через multipart POST
+- Папка: `vestavto/products`, трансформація 1200×1200, quality auto:good
+
+### SQLAdmin
+- `/admin` — CRUD для Manager, Client, Product, Order, Payment
 
 ---
 
-## Що НЕ реалізовано / Потребує уваги
+## TODO перед production
 
-### ❌ Monobank Webhook Signature Verification
+### Платіжна система (вибрати варіант)
+- **Варіант 1**: Monobank Acquiring (клієнт відкриває ФОП) — поточна інтеграція готова, замінити тестовий токен
+- **Варіант 2**: LiqPay (ПриватБанк) — потребує окремої інтеграції
+- Перевірити що `MONOBANK_API_TOKEN` встановлений в prod (інакше mock режим)
+
+### Аналітика / трекінг
+- Трекінг джерел трафіку через `?start=` параметр (перед запуском реклами)
+- Опціонально: власний домен, VPS
+
+### Дрібниці
+- Автоматичне оновлення статусу доставки (polling або NP webhook)
+- Об'єднання ТТН для кількох замовлень одного клієнта
+- Видалення старих фото з Cloudinary при редагуванні товару
+- Статистика/дашборд для менеджера
+
+---
+
+## Виправлені баги (хронологія)
+
+| Баг | Статус | Commit |
+|---|---|---|
+| GET /products 500 (cloudinary import) | ✅ Fixed | `943a559` |
+| GET /products 500 (photos JSON parse) | ✅ Fixed | `de02030` |
+| SQLAdmin crash on Products page | ✅ Fixed | `b7ed85f` |
+| TTN не створювалась для deposit | ✅ Fixed | `65f2d30` |
+| BackwardDeliveryData неправильна сума | ✅ Fixed | `94559ad` |
+| Auth: тільки client bot token | ✅ Fixed | `72f42d6` |
+| Payment URL в Mini App | ✅ Fixed | `2f062f6` |
+| Білий текст на білому фоні (Tailwind ink) | ✅ Fixed | `9f723b2` |
+| Пусті поля при редагуванні (hooks order) | ✅ Fixed | `9f723b2` |
+| Atomic save (create + upload фото) | ✅ Fixed | `9f723b2` |
+| parseFloat NaN при збереженні ціни | ✅ Fixed | `b4306eb` |
+| is_available зникає при збереженні | ✅ Fixed | `b4306eb` |
+| PostgreSQL міграції — aborted transaction | ✅ Fixed | `96545bc` |
+| Deep link navigate спрацьовує повторно | ✅ Fixed | `a58d8df` |
+| Monobank webhook без підпису | ✅ Fixed | `2ce2243` |
+
+---
+
+## Важливі технічні рішення
+
+### 1. PostgreSQL міграції — кожна в окремій транзакції
 ```python
-# app/services/monobank.py
-async def verify_webhook_signature(...) -> bool:
-    # TODO: implement ECDSA verification for production
-    return True  # завжди True
-```
-**Ризик:** будь-хто може надіслати фейковий webhook і підтвердити оплату.
-**Що потрібно:** X-Sign header, ECDSA verification через Monobank public key.
+# БУЛО: одна транзакція — якщо ALTER TABLE fails → вся TX aborted
+async with engine.begin() as conn:
+    ALTER TABLE is_negotiable  # FAIL → TX вбита
+    ALTER TABLE is_reserved    # ігнорується
 
-### ❌ Mock режим Monobank не вимкнено примусово
+# СТАЛО: ізольовані транзакції
+for sql in migrations:
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(sql))
+    except Exception:
+        pass  # column already exists — OK
+```
+
+### 2. Два Telegram боти
+`validate_init_data()` намагається обидва токени — будь-який валідний приймається.
+
+### 3. Photos як JSON string
 ```python
-# app/services/monobank.py
-if not MONOBANK_API_TOKEN:
-    return {"invoice_id": "mock_...", "page_url": "https://mock..."}
+photos: Mapped[str] = mapped_column(Text)
+# Pydantic field_validator парсить при відповіді
 ```
-Якщо `MONOBANK_API_TOKEN` не виставлений — замовлення "платяться" через mock. Потрібна перевірка в production.
 
-### ❌ Пошук по каталогу
-- `GET /products` підтримує `category` і `car_model` фільтри
-- Пошук по назві (`q=`) — відсутній
-- Frontend: немає текстового поля пошуку
+### 4. isSaving замість isPending
+React Query `isPending` = false після `mutationFn` resolve, але `onSuccess` ще виконується.
+Окремий `useState(isSaving)` контролює весь процес create → upload фото.
 
-### ❌ Pagination
-- `GET /products` — без пагінації, повертає всі товари
-- При великій кількості товарів — проблема продуктивності
+### 5. Deep link — navigate тільки раз
+```typescript
+const handled = useRef(false)
+useEffect(() => {
+    if (handled.current) return
+    handled.current = true
+    // navigate(...)
+}, [])
+```
 
-### ❌ Видалення існуючого фото при редагуванні через бекенд
-- Frontend: кнопка ✕ видаляє URL з `form.photos` → `PUT /products/{id}` з новим масивом ✅
-- Але **старе фото залишається на Cloudinary** (немає `delete_image()` в `cloudinary_service.py`)
-- Утримання: зайві ресурси на Cloudinary
-
-### ❌ Tracking Auto-Refresh
-- `GET /delivery/{id}/track` — оновлює `order.status` при виклику
-- Але клієнт мусить вручну зайти на OrderPage і подивитись
-- Немає фонового polling або webhook від Nova Poshta
-
-### ❌ Статистика/Дашборд для менеджера
-- `DashboardStats` schema є в `schemas.py`, але endpoint відсутній
-- Немає сторінки зі статистикою продажів, виторгу, активних замовлень
-
-### ❌ Блокування клієнтів
-- `Client.is_blocked` поле є в моделі
-- Немає перевірки при авторизації чи відкриванні нових замовлень
-
-### ❌ Director роль
-- `UserRole.director` є в enum
-- `get_current_director()` dependency є в auth.py
-- Ніде не використовується — немає director-specific endpoints або UI
-
-### ⚠️ Менеджерський бот — чорний екран
-- Причина: URL в BotFather Menu Button може бути невірним
-- Має бути: `https://[vercel-domain]/admin/products`
-- Перевірити через @BotFather → /mybots → @vestavto_manager_bot → Menu Button
-
-### ⚠️ Продуктивність зображень
-- `photos` зберігаються як JSON string у PostgreSQL TEXT колонці
-- При великій кількості фото — нема оптимізації, lazy loading
+### 6. Tailwind custom color `ink`
+`#1a1a2e` — замість `text-color` з Telegram theme (білий у dark mode ламав UI).
 
 ---
 
@@ -202,245 +233,42 @@ if not MONOBANK_API_TOKEN:
 
 ### Backend (Render.com)
 
-| Variable | Обов'язкова | Де використовується |
+| Variable | Обов'язкова | Де |
 |---|---|---|
-| `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| `JWT_SECRET` | ✅ | Підпис JWT токенів |
-| `TELEGRAM_CLIENT_BOT_TOKEN` | ✅ | Валідація initData клієнтів |
-| `TELEGRAM_MANAGER_BOT_TOKEN` | ✅ | Валідація initData менеджерів |
-| `TELEGRAM_MANAGER_CHAT_IDS` | ✅ | Куди надсилати сповіщення (comma-separated) |
-| `MONOBANK_API_TOKEN` | ✅ | Monobank API (без нього — mock mode) |
-| `MONOBANK_WEBHOOK_URL` | ✅ | URL для Monobank webhook callback |
-| `NOVAPOSHTA_API_KEY` | ✅ | Nova Poshta API ключ |
+| `DATABASE_URL` | ✅ | PostgreSQL |
+| `JWT_SECRET` | ✅ | JWT підпис |
+| `TELEGRAM_CLIENT_BOT_TOKEN` | ✅ | Валідація initData |
+| `TELEGRAM_MANAGER_BOT_TOKEN` | ✅ | Валідація initData |
+| `TELEGRAM_MANAGER_CHAT_IDS` | ✅ | Сповіщення (comma-separated) |
+| `MONOBANK_API_TOKEN` | ✅ | Monobank API (без нього — mock) |
+| `MONOBANK_WEBHOOK_URL` | ✅ | Webhook callback URL |
+| `NOVAPOSHTA_API_KEY` | ✅ | НП API ключ |
 | `NP_SENDER_REF` | ✅ | Ref відправника НП |
-| `NP_CONTACT_SENDER_REF` | ✅ | Ref контакту відправника НП |
-| `NP_SENDER_PHONE` | ✅ | Телефон відправника НП |
-| `NP_CITY_SENDER_REF` | ✅ | Ref міста відправника НП |
-| `NP_WAREHOUSE_SENDER_REF` | ✅ | Ref відділення відправника НП |
-| `CLOUDINARY_CLOUD_NAME` | ✅ | Cloudinary cloud name |
-| `CLOUDINARY_API_KEY` | ✅ | Cloudinary API key |
-| `CLOUDINARY_API_SECRET` | ✅ | Cloudinary API secret |
-| `ADMIN_USER` | ✅ | Логін SQLAdmin панелі |
-| `ADMIN_PASS` | ✅ | Пароль SQLAdmin панелі |
+| `NP_CONTACT_SENDER_REF` | ✅ | Ref контакту |
+| `NP_SENDER_PHONE` | ✅ | Телефон відправника |
+| `NP_CITY_SENDER_REF` | ✅ | Ref міста відправника |
+| `NP_WAREHOUSE_SENDER_REF` | ✅ | Ref відділення відправника |
+| `CLOUDINARY_CLOUD_NAME` | ✅ | Cloudinary |
+| `CLOUDINARY_API_KEY` | ✅ | Cloudinary |
+| `CLOUDINARY_API_SECRET` | ✅ | Cloudinary |
+| `ADMIN_USER` | ✅ | SQLAdmin логін |
+| `ADMIN_PASS` | ✅ | SQLAdmin пароль |
 | `FRONTEND_URL` | ✅ | CORS whitelist |
-| `DEBUG` | ❌ | Режим дебагу |
-| `PORT` | ❌ | Render автоматично виставляє 10000 |
 
 ### Frontend (Vercel)
 
-| Variable | Обов'язкова | Де використовується |
+| Variable | Обов'язкова | Де |
 |---|---|---|
 | `VITE_API_URL` | ✅ | Backend API base URL |
-
----
-
-## Важливі технічні рішення
-
-### 1. Два Telegram боти
-Клієнтський (`@vestavto_bot`) і менеджерський (`@vestavto_manager_bot`) боти.
-`validate_init_data()` намагається обидва токени — будь-який валідний приймається.
-
-### 2. Photos як JSON string
-```python
-# models.py
-photos: Mapped[str] = mapped_column(Text, default="[]")
-
-# schemas.py — validator парсить JSON
-@field_validator('photos', mode='before')
-def parse_photos(cls, v):
-    if isinstance(v, str):
-        return json.loads(v)
-    return v or []
-```
-Зберігається як `'["url1","url2"]'` в PostgreSQL TEXT.
-
-### 3. Lazy import Cloudinary
-```python
-# routes/products.py
-async def upload_product_image(...):
-    from app.services.cloudinary_service import upload_image  # lazy!
-```
-Причина: module-level import cloudinary ламав `GET /products` (asyncio context проблема).
-
-### 4. Hooks до conditional returns (React)
-```typescript
-// Правильно:
-const { data } = useQuery({...})          // ← всі хуки тут
-const mutation = useMutation({...})
-
-if (authLoading) return <Loading />       // ← conditional повернення після хуків
-if (!isManager) return <Navigate to="/" />
-```
-Порушення цього правила призводило до empty edit fields і undefined behavior.
-
-### 5. isSaving замість isPending для атомарного збереження
-```typescript
-// React Query isPending = false після mutationFn resolve
-// onSuccess не входить в isPending window
-// Тому: окремий useState для UX-контролю всього процесу
-const [isSaving, setIsSaving] = useState(false)
-const handleSave = async () => {
-    setIsSaving(true)
-    await api.post('/products', data)      // create
-    await uploadPhotos(id, pendingPhotos)  // upload — кнопка все ще disabled
-    setIsSaving(false)
-}
-```
-
-### 6. Seeding pattern (prod)
-Для seed даних в production використовується тимчасовий endpoint:
-```python
-# main.py — add → push → deploy (~90-180s) → use → remove → push
-@app.post("/api/seed-manager")
-async def seed_manager(x_admin_pass: str = Header(...)):
-    ...
-```
-
-### 7. TTN автоматично після оплати
-```python
-# payments.py webhook handler
-if payment_type == DEPOSIT:
-    order.status = DEPOSIT_PAID
-    background_tasks.add_task(create_ttn_for_order, order.id)
-elif paid >= total:
-    order.status = PAID
-    background_tasks.add_task(create_ttn_for_order, order.id)
-```
-Payment method для НП: `Cash` (DEPOSIT_PAID) або `NonCash` (PAID).
-
-### 8. BackwardDeliveryData
-```python
-"RedeliveryString": str(int(cash_on_delivery))  # залишок = total - paid
-# НЕ: str(int(cost)) — то була вся сума товару
-```
-
-### 9. Tailwind custom color `ink`
-```javascript
-// tailwind.config.js
-colors: { ink: '#1a1a2e' }
-```
-Потрібен тому що `--tg-theme-text-color` в Telegram dark theme стає білим,
-що ламало текст на білому фоні карток.
+| `VITE_BOT_USERNAME` | ✅ | Deep link генерація |
+| `VITE_MANAGER_USERNAME` | ✅ | "Запитати" кнопка |
 
 ---
 
 ## Deployment URLs
 
 - **Backend:** `https://vestavto-backend-6keq.onrender.com`
-- **Frontend:** Vercel (domain — перевірити в Vercel dashboard)
+- **Frontend:** `https://vestavto-mvp.vercel.app`
 - **SQLAdmin:** `https://vestavto-backend-6keq.onrender.com/admin`
 - **API docs:** `https://vestavto-backend-6keq.onrender.com/docs`
-
----
-
-## Статус багів (хронологія git)
-
-| Баг | Статус | Commit |
-|---|---|---|
-| GET /products 500 (cloudinary import) | ✅ Fixed | `943a559` |
-| GET /products 500 (photos JSON parse) | ✅ Fixed | `de02030` |
-| SQLAdmin crash on Products page | ✅ Fixed | `b7ed85f` |
-| /admin/products redirect on reload | ✅ Fixed | `b7ed85f` |
-| TTN не створювалась для deposit | ✅ Fixed | `65f2d30` |
-| TTN: 6 підбагів (DateTime, env vars, etc) | ✅ Fixed | `65f2d30` |
-| BackwardDeliveryData неправильна сума | ✅ Fixed | `94559ad` |
-| Auth: тільки client bot token | ✅ Fixed | `72f42d6` |
-| Payment URL в Mini App | ✅ Fixed | `2f062f6` |
-| Білий текст на білому фоні | ✅ Fixed | `9f723b2` |
-| Пусті поля при редагуванні (hooks order) | ✅ Fixed | `9f723b2` |
-| Карусель фото на ProductPage | ✅ Fixed | `9f723b2` |
-| Видалення існуючих фото | ✅ Fixed | `9f723b2` |
-| Atomic save (create + upload) | ✅ Fixed | `9f723b2` |
-| Monobank webhook signature | ❌ TODO | — |
-| "Order not found" race condition (checkout) | ✅ Fixed | `ffe95f6` |
-| Кошик не очищається після замовлення | ✅ Fixed | `ffe95f6` |
-| Видалення товару з скасованих замовлень | ✅ Fixed | `ef80649` |
-| Курсор (caret) не видно в інпутах | ✅ Fixed | `b87c3aa` |
-
----
-
-## Бізнес-рішення (з планування)
-
-| Рішення | Деталі |
-|---------|--------|
-| Завдаток | Сумується по кожному товару в кошику |
-| Timeout 30 хв | Сповіщення менеджеру, НЕ авто-скасування |
-| 2 замовлення від 1 клієнта | Об'єднувати в одну ТТН (TODO) |
-| Зворотній зв'язок | Кнопка → прямий чат з менеджером в Telegram |
-
----
-
-## TODO — План реалізації
-
-### ~~1. Сповіщення клієнту в Telegram~~ ✅ DONE (`149c4ca`)
-
-**Що:**
-- Після оплати: "✅ Оплату отримано! Очікуйте відправлення."
-- Після ТТН: "🚚 Замовлення відправлено. ТТН: {номер}. Відстежити: {link}"
-
-**Як:**
-1. Створити `services/telegram_client_notify.py` (аналог telegram_notify.py, але CLIENT_BOT_TOKEN)
-2. В `payments.py` webhook після успішної оплати → `notify_client(telegram_id, message)`
-3. В `novaposhta.py` після створення ТТН → `notify_client(telegram_id, message)`
-4. Client.telegram_id вже є в моделі
-
-**Файли:** `services/telegram_client_notify.py`, `routes/payments.py`, `services/novaposhta.py`
-
----
-
-### ~~2. Timeout 30 хвилин~~ ✅ DONE (`next-commit`)
-
-**Що:**
-- Замовлення `new` або `pending_payment` більше 30 хв
-- Менеджер отримує: "⚠️ Замовлення #{id} не оплачено 30+ хв. Клієнт: {name}, {phone}"
-- НЕ скасовувати автоматично
-
-**Як (Варіант — Background task):**
-1. При створенні замовлення → `background_tasks.add_task(check_payment_timeout, order.id)`
-2. `check_payment_timeout`: sleep 30 хв → перевірити статус → якщо ще не оплачено → notify_manager
-3. Або: endpoint `GET /orders/check-timeouts` для виклику через Render Cron Job кожні 10 хв
-
-**Файли:** `routes/orders.py` або `services/timeout_checker.py`
-
----
-
-### ~~3. Кнопка "Запитати про товар"~~ ✅ DONE
-
-**Що:**
-- На ProductPage кнопка "💬 Запитати про товар"
-- Відкриває прямий чат з менеджером в Telegram
-- Готовий текст: "Питання по товару: {назва} (ID: {id})"
-
-**Як:**
-1. В ProductPage додати кнопку біля "Додати в кошик"
-2. onClick: `Telegram.WebApp.openTelegramLink('https://t.me/{MANAGER_USERNAME}?text=...')`
-3. Додати env var `VITE_MANAGER_USERNAME` у Vercel (наприклад: `ivan_vestavto`)
-
-**Файли:** `frontend/src/pages/ProductPage.tsx`, Vercel env vars
-
----
-
-### ~~4. UI Polish~~ ✅ DONE (`3b7e691`, `b87c3aa`)
-
-- btn-primary: rounded-xl
-- HomePage: SVG photo placeholder, flex-col cards, rounded-xl
-- ProductPage: info card (shadow-sm rounded-xl), price text-3xl, human labels для category/car, pill badges
-- index.css: input/textarea/select — `color: #1a1a2e`, `caret-color: #3b82f6`
-
----
-
-### 5. Git cleanup перед передачею (Пріоритет: ПЕРЕД РЕЛІЗОМ)
-
-- Видалити co-author Claude з комітів (git filter-branch або BFG)
-- Перевірити що немає секретів в історії
-- Squash commits якщо потрібно
-
----
-
-## Порядок виконання
-
-1. ✅ ~~Сповіщення клієнту~~ — DONE (`149c4ca`)
-2. ✅ ~~Timeout 30 хв~~ — DONE
-3. ✅ ~~Кнопка "Запитати"~~ — DONE
-4. ✅ ~~UI Polish~~ — DONE (`3b7e691`, `b87c3aa`)
-5. 🔄 Git cleanup (перед релізом)
+- **Mini App:** `https://t.me/vestavto_client_bot/shop`

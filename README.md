@@ -1,164 +1,244 @@
 # VestAvto MVP
 
-Telegram Mini App магазин б/у автозапчастин.
+Telegram Mini App — магазин б/у автозапчастин для Skoda Superb / VW Passat / Touareg.
 
-## Stack
+## Tech Stack
 
-- **Backend:** FastAPI + SQLAlchemy + SQLite/PostgreSQL
-- **Frontend:** React + TypeScript + Tailwind + Vite
-- **Admin:** SQLAdmin
-- **Payments:** Monobank API
-- **Delivery:** Nova Poshta API
+| Шар | Технологія |
+|---|---|
+| Backend | FastAPI + SQLAlchemy async + PostgreSQL |
+| Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
+| State | Zustand (cart, auth, toast) |
+| Data fetching | TanStack React Query v5 |
+| Payments | Monobank Acquiring (ECDSA webhook verification) |
+| Delivery | Nova Poshta API (TTN creation + tracking) |
+| Storage | Cloudinary (product photos) |
+| Auth | Telegram initData HMAC-SHA256 + JWT |
+| Deploy | Render (backend) + Vercel (frontend) |
 
-## Quick Start
+## Основні функції
 
-### 1. Backend
+**Клієнт:**
+- Каталог з фільтрами (категорія, модель авто) та пошуком
+- Сторінка товару з каруселлю фото
+- Кошик + оформлення замовлення (Nova Poshta autocomplete)
+- Оплата через Monobank (завдаток або повна сума)
+- Відстеження статусу замовлення та ТТН
+- Deep links: `t.me/vestavto_client_bot/shop?startapp=product_25`
+- Кнопка "Запитати ціну" → Telegram DM до менеджера
+
+**Менеджер:**
+- CRUD товарів (full-screen modal, фото upload на Cloudinary)
+- Статуси товарів: В наявності / Заброньовано / Продано
+- Бронювання: товар прихований з каталогу, але доступний по прямому посиланню
+- Договірна ціна (is_negotiable)
+- Управління замовленнями: статуси, контактні дані, ТТН
+- Excel імпорт/експорт товарів
+- Копіювання deep link товару
+- Inline пошук по ID та назві
+
+## Запуск локально
+
+### Backend
 
 ```bash
 cd backend
-
-# Створити .env
-cp .env.example .env
-# Заповнити реальними ключами!
-
-# Встановити залежності
+cp .env.example .env   # заповнити ключами
 pip install -r requirements.txt
-
-# Запустити
 python main.py
 ```
 
-Backend доступний на http://localhost:8000
-- API docs: http://localhost:8000/docs
-- Admin panel: http://localhost:8000/admin (admin / vestavto2026)
+- API: http://localhost:8000
+- Docs: http://localhost:8000/docs
+- Admin: http://localhost:8000/admin
 
-### 2. Frontend
+### Frontend
 
 ```bash
 cd frontend
-
-# Встановити залежності
 npm install
-
-# Створити .env
 echo "VITE_API_URL=http://localhost:8000/api" > .env
-
-# Запустити
 npm run dev
 ```
 
-Frontend доступний на http://localhost:5173
+- App: http://localhost:5173
 
-### 3. Docker (optional)
+### Docker (опціонально)
 
 ```bash
 docker-compose up -d
 ```
 
-## Environment Variables
+## Змінні середовища
 
 ### Backend (.env)
 
-```
-# Telegram
-TELEGRAM_CLIENT_BOT_TOKEN=your_bot_token
-TELEGRAM_MANAGER_BOT_TOKEN=your_manager_bot_token
+```env
+# Database
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost/vestavto
 
 # Auth
-JWT_SECRET=your-secret-key
-ADMIN_USER=admin
-ADMIN_PASS=your-admin-password
+JWT_SECRET=your-secret-key-min-32-chars
+
+# Telegram
+TELEGRAM_CLIENT_BOT_TOKEN=...
+TELEGRAM_MANAGER_BOT_TOKEN=...
+TELEGRAM_MANAGER_CHAT_IDS=123456789,987654321
 
 # Monobank
-MONOBANK_API_TOKEN=your_monobank_token
-MONOBANK_WEBHOOK_URL=https://your-domain.com/api/payments/webhook
+MONOBANK_API_TOKEN=...
+MONOBANK_WEBHOOK_URL=https://your-backend.onrender.com/api/payments/webhook
 
 # Nova Poshta
-NOVAPOSHTA_API_KEY=your_np_key
+NOVAPOSHTA_API_KEY=...
 NP_SENDER_REF=...
 NP_CONTACT_SENDER_REF=...
 NP_SENDER_PHONE=380...
 NP_CITY_SENDER_REF=...
 NP_WAREHOUSE_SENDER_REF=...
 
-# Database (optional, default SQLite)
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost/vestavto
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+
+# Admin panel
+ADMIN_USER=admin
+ADMIN_PASS=your-password
+
+# CORS
+FRONTEND_URL=https://your-app.vercel.app
 ```
 
 ### Frontend (.env)
 
-```
-VITE_API_URL=https://your-backend.com/api
+```env
+VITE_API_URL=https://your-backend.onrender.com/api
+VITE_BOT_USERNAME=vestavto_client_bot
+VITE_MANAGER_USERNAME=your_manager_telegram
 ```
 
-## API Endpoints
+## Структура проєкту
+
+```
+vestavto-mvp/
+├── backend/
+│   ├── app/
+│   │   ├── routes/         auth, products, orders, payments, delivery
+│   │   ├── services/       monobank, novaposhta, telegram_notify, cloudinary
+│   │   ├── models.py       ORM моделі
+│   │   ├── schemas.py      Pydantic v2 схеми
+│   │   ├── auth.py         Telegram + JWT
+│   │   └── database.py     AsyncEngine + міграції
+│   ├── main.py
+│   └── requirements.txt
+│
+└── frontend/
+    └── src/
+        ├── pages/
+        │   ├── HomePage.tsx
+        │   ├── ProductPage.tsx
+        │   ├── CartPage.tsx
+        │   ├── CheckoutPage.tsx
+        │   ├── OrdersPage.tsx
+        │   ├── OrderPage.tsx
+        │   └── admin/
+        │       ├── ProductsPage.tsx
+        │       └── OrdersPage.tsx
+        ├── store/           auth, cart, toast (Zustand)
+        ├── components/      Layout, Toast
+        └── api.ts           Axios + interceptors
+```
+
+## API
 
 ### Auth
-- `POST /api/auth/telegram` — авторизація через initData
-- `GET /api/auth/me` — поточний користувач
+```
+POST /api/auth/telegram     Авторизація через initData
+GET  /api/auth/me           Поточний користувач
+```
 
 ### Products
-- `GET /api/products` — список товарів
-- `GET /api/products/{id}` — деталі товару
-- `POST /api/products` — створити (manager)
-- `PUT /api/products/{id}` — оновити (manager)
-- `DELETE /api/products/{id}` — видалити (manager)
+```
+GET    /api/products              Список (фільтри: category, car_model, available_only)
+GET    /api/products/{id}         Деталі
+POST   /api/products              Створити (manager)
+PUT    /api/products/{id}         Оновити (manager)
+DELETE /api/products/{id}         Видалити (manager)
+POST   /api/products/{id}/upload-image  Завантажити фото (manager)
+GET    /api/products/export       Excel export (manager)
+POST   /api/products/import       Excel import (manager)
+```
 
 ### Orders
-- `POST /api/orders` — створити замовлення
-- `GET /api/orders` — список замовлень
-- `GET /api/orders/{id}` — деталі
-- `PATCH /api/orders/{id}/status` — оновити статус (manager)
+```
+POST   /api/orders                Створити замовлення
+GET    /api/orders                Список (manager — всі, client — свої)
+GET    /api/orders/{id}           Деталі
+PATCH  /api/orders/{id}/status    Оновити статус (manager)
+PATCH  /api/orders/{id}/contact   Редагувати контакт (manager)
+```
 
 ### Payments
-- `POST /api/payments/create` — створити рахунок Monobank
-- `POST /api/payments/webhook` — webhook Monobank
-- `POST /api/payments/{order_id}/verify` — ручна верифікація (manager)
+```
+POST /api/payments/create         Створити Monobank invoice
+POST /api/payments/webhook        Webhook від Monobank (ECDSA verified)
+POST /api/payments/{id}/verify    Ручна верифікація (manager)
+```
 
 ### Delivery
-- `GET /api/delivery/cities?query=` — пошук міст НП
-- `GET /api/delivery/warehouses?city_ref=` — відділення
-- `POST /api/delivery/{order_id}/create-ttn` — створити ТТН (manager)
-- `GET /api/delivery/{order_id}/track` — трекінг
+```
+GET  /api/delivery/cities         Пошук міст НП
+GET  /api/delivery/warehouses     Відділення НП
+POST /api/delivery/{id}/create-ttn  Створити ТТН (manager)
+GET  /api/delivery/{id}/track     Трекінг
+```
 
 ## Deploy
 
 ### Render (Backend)
 
-1. Create Web Service
-2. Build command: `pip install -r requirements.txt`
-3. Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-4. Add environment variables
+1. Створити Web Service з GitHub
+2. Build: `pip install -r requirements.txt`
+3. Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+4. Додати всі env vars
+5. Додати PostgreSQL addon
 
 ### Vercel (Frontend)
 
-1. Import from GitHub
+1. Import з GitHub
 2. Framework: Vite
-3. Add `VITE_API_URL` environment variable
+3. Додати `VITE_API_URL`, `VITE_BOT_USERNAME`, `VITE_MANAGER_USERNAME`
 
-### Telegram Bot Setup
+### Telegram BotFather
 
-1. Set WebApp URL in BotFather:
-   ```
-   /setmenubutton
-   @vestavto_client_bot
-   https://your-frontend.vercel.app
-   ```
+```
+/mybots → @vestavto_client_bot → Bot Settings → Menu Button
+URL: https://your-app.vercel.app
+
+Mini App (для deep links):
+/newapp → short name: shop → URL: https://your-app.vercel.app
+```
 
 ## Додати менеджера
+
+Через SQLAdmin (`/admin`) або SQL:
 
 ```sql
 INSERT INTO managers (telegram_id, full_name, role, is_active)
 VALUES (123456789, 'Ім''я Менеджера', 'manager', true);
 ```
 
-Або через SQLAdmin: http://localhost:8000/admin
+## Флоу оплати
 
-## Flow
-
-1. Клієнт відкриває Mini App → авторизація через initData
-2. Переглядає каталог → додає в кошик
-3. Оформлює замовлення → вибирає НП відділення
-4. Оплачує через Monobank (завдаток або повна)
-5. Webhook підтверджує оплату → автоматично створюється ТТН
-6. Клієнт відстежує статус доставки
+```
+Клієнт оформляє замовлення
+  → POST /orders (створюється в БД)
+  → POST /payments/create (Monobank invoice)
+  → Клієнт оплачує на сторінці Monobank
+  → Monobank надсилає webhook (X-Sign ECDSA)
+  → Backend верифікує підпис
+  → Оновлює статус замовлення
+  → Background task: створює ТТН (Nova Poshta)
+  → Сповіщення клієнту + менеджеру в Telegram
+```
