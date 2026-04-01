@@ -248,26 +248,36 @@ export default function AdminProductsPage() {
   }, [products])
 
   // Search across ALL products (ignores active tab); empty query → use tab filter
+  // Numeric query → exact ID match only; text → name/description, sorted by relevance
+  const searchProducts = (list: any[], query: string) => {
+    const q = query.trim().toLowerCase()
+    if (!q) return null
+    const rawQ = q.replace('#', '')
+    const isNumeric = /^\d+$/.test(rawQ)
+    if (isNumeric) {
+      return list.filter((p: any) => String(p.id) === rawQ)
+    }
+    return list
+      .map((p: any) => {
+        const nameMatch = p.name?.toLowerCase().includes(q)
+        const descMatch = (p.description ?? '').toLowerCase().includes(q)
+        if (!nameMatch && !descMatch) return null
+        return { p, score: nameMatch ? 0 : 1 }
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => a.score - b.score)
+      .map((x: any) => x.p)
+  }
+
   const filteredProducts = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) return tabProducts
-    return (products as any[] ?? []).filter((p: any) =>
-      String(p.id) === q.replace('#', '') ||
-      p.name?.toLowerCase().includes(q) ||
-      (p.description ?? '').toLowerCase().includes(q)
-    )
+    const result = searchProducts(products as any[] ?? [], searchQuery)
+    return result ?? tabProducts
   }, [products, tabProducts, searchQuery])
 
   const suggestions = useMemo(() => {
     if (!searchQuery.trim()) return []
-    const q = searchQuery.trim().toLowerCase()
-    return (products as any[] ?? [])
-      .filter((p: any) =>
-        String(p.id) === q.replace('#', '') ||
-        p.name?.toLowerCase().includes(q) ||
-        (p.description ?? '').toLowerCase().includes(q)
-      )
-      .slice(0, 5)
+    const result = searchProducts(products as any[] ?? [], searchQuery)
+    return (result ?? []).slice(0, 5)
   }, [products, searchQuery])
 
   const openSearch = () => {
@@ -383,11 +393,11 @@ export default function AdminProductsPage() {
                           : <div className="w-full h-full flex items-center justify-center text-gray-300 text-xs">?</div>
                         }
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-gray-400 text-xs">#{p.id}</span>
-                        <span className="text-sm text-ink ml-1 truncate">{p.name}</span>
+                      <div className="flex-1 min-w-0 flex items-center gap-1">
+                        <span className="text-gray-400 text-xs flex-shrink-0">#{p.id}</span>
+                        <span className="text-sm text-ink truncate">{p.name}</span>
                       </div>
-                      <span className="text-xs text-primary flex-shrink-0">{p.price} ₴</span>
+                      <span className="text-xs text-primary flex-shrink-0 ml-2">{p.price} ₴</span>
                     </button>
                   ))}
                 </div>
