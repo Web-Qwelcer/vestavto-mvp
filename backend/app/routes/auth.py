@@ -26,20 +26,43 @@ async def auth_telegram(
     Авторизація через Telegram initData.
     Повертає JWT токен.
     """
-    # Валідуємо initData
-    tg_user = validate_init_data(init_data)
-    if not tg_user:
+    # Валідуємо initData — отримуємо (user, bot_mode) або None
+    result = validate_init_data(init_data)
+    if not result:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Telegram data"
         )
-    
-    # Перевіряємо чи це менеджер
-    result = await session.execute(
+    tg_user, bot_mode = result
+
+    # Клієнтський бот — завжди client role, незалежно від таблиці managers
+    if bot_mode == "client":
+        db_result = await session.execute(
+            select(Client).where(Client.telegram_id == tg_user.id)
+        )
+        client = db_result.scalar_one_or_none()
+        if not client:
+            full_name = tg_user.first_name
+            if tg_user.last_name:
+                full_name += f" {tg_user.last_name}"
+            client = Client(
+                telegram_id=tg_user.id,
+                username=tg_user.username,
+                full_name=full_name
+            )
+            session.add(client)
+            await session.flush()
+        if client.is_blocked:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is blocked")
+        token = create_access_token(client.id, client.telegram_id, UserRole.CLIENT)
+        return TokenResponse(access_token=token, role=UserRole.CLIENT, user_id=client.id, bot_mode="client")
+
+    # Менеджерський бот — перевіряємо таблицю managers
+    db_result = await session.execute(
         select(Manager).where(Manager.telegram_id == tg_user.id)
     )
-    manager = result.scalar_one_or_none()
-    
+    manager = db_result.scalar_one_or_none()
+
     if manager:
         if not manager.is_active:
             raise HTTPException(
@@ -47,43 +70,12 @@ async def auth_telegram(
                 detail="Manager account is deactivated"
             )
         token = create_access_token(manager.id, manager.telegram_id, manager.role)
-        return TokenResponse(
-            access_token=token,
-            role=manager.role,
-            user_id=manager.id
-        )
-    
-    # Інакше — клієнт
-    result = await session.execute(
-        select(Client).where(Client.telegram_id == tg_user.id)
-    )
-    client = result.scalar_one_or_none()
-    
-    if not client:
-        # Створюємо нового клієнта
-        full_name = tg_user.first_name
-        if tg_user.last_name:
-            full_name += f" {tg_user.last_name}"
-        
-        client = Client(
-            telegram_id=tg_user.id,
-            username=tg_user.username,
-            full_name=full_name
-        )
-        session.add(client)
-        await session.flush()
-    
-    if client.is_blocked:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is blocked"
-        )
-    
-    token = create_access_token(client.id, client.telegram_id, UserRole.CLIENT)
-    return TokenResponse(
-        access_token=token,
-        role=UserRole.CLIENT,
-        user_id=client.id
+        return TokenResponse(access_token=token, role=manager.role, user_id=manager.id, bot_mode="manager")
+
+    # Не менеджер у менеджерському боті — 403
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied"
     )
 
 

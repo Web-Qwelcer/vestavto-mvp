@@ -4,7 +4,6 @@ import { Navigate } from 'react-router-dom'
 import api from '../../api'
 import { useAuthStore } from '../../store/auth'
 import { useToastStore } from '../../store/toast'
-import { isManagerBot } from '../../botMode'
 
 const statuses = [
   'new',
@@ -29,7 +28,7 @@ const statusLabels: Record<string, string> = {
 }
 
 export default function AdminOrdersPage() {
-  const { isManager, isLoading: authLoading } = useAuthStore()
+  const { isManager, isLoading: authLoading, botMode } = useAuthStore()
   const queryClient = useQueryClient()
   const { showToast } = useToastStore()
 
@@ -87,7 +86,7 @@ export default function AdminOrdersPage() {
   // Conditional returns after hooks
   if (authLoading) return <div className="p-4 text-center text-ink">Завантаження...</div>
   if (!isManager) {
-    if (isManagerBot) return (
+    if (botMode === 'manager') return (
       <div className="min-h-screen flex items-center justify-center p-8">
         <div className="text-center">
           <div className="text-5xl mb-4">🚫</div>

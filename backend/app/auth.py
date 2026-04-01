@@ -50,10 +50,12 @@ def _check_init_data_with_token(
     return hmac.compare_digest(calculated_hash, received_hash)
 
 
-def validate_init_data(init_data: str) -> Optional[TelegramUser]:
+def validate_init_data(init_data: str) -> Optional[tuple["TelegramUser", str]]:
     """
     Валідація Telegram WebApp initData через HMAC-SHA256.
-    Перевіряє CLIENT і MANAGER bot токени — валідний будь-який.
+    Перевіряє CLIENT і MANAGER bot токени.
+    Повертає (TelegramUser, bot_mode) або None.
+    bot_mode: "client" | "manager"
     https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
     """
     try:
@@ -70,12 +72,11 @@ def validate_init_data(init_data: str) -> Optional[TelegramUser]:
         client_token  = os.getenv("TELEGRAM_CLIENT_BOT_TOKEN", "")
         manager_token = os.getenv("TELEGRAM_MANAGER_BOT_TOKEN", "")
 
-        valid = (
-            _check_init_data_with_token(parsed, received_hash, data_check_string, client_token)
-            or
-            _check_init_data_with_token(parsed, received_hash, data_check_string, manager_token)
-        )
-        if not valid:
+        if _check_init_data_with_token(parsed, received_hash, data_check_string, client_token):
+            bot_mode = "client"
+        elif _check_init_data_with_token(parsed, received_hash, data_check_string, manager_token):
+            bot_mode = "manager"
+        else:
             return None
 
         # Перевіряємо auth_date (не старіше 24 годин)
@@ -88,13 +89,14 @@ def validate_init_data(init_data: str) -> Optional[TelegramUser]:
             return None
 
         user_json = json.loads(unquote(user_data))
-        return TelegramUser(
+        tg_user = TelegramUser(
             id=user_json["id"],
             first_name=user_json.get("first_name", ""),
             last_name=user_json.get("last_name"),
             username=user_json.get("username"),
             photo_url=user_json.get("photo_url"),
         )
+        return tg_user, bot_mode
 
     except Exception:
         return None

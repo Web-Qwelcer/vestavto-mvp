@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import api from '../api'
-import { isClientBot } from '../botMode'
 
 interface User {
   id: number
@@ -17,6 +16,7 @@ interface AuthState {
   user: User | null
   isLoading: boolean
   isManager: boolean
+  botMode: 'client' | 'manager' | null
   authError: string | null
   login: (initData: string) => Promise<void>
   logout: () => void
@@ -30,6 +30,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isLoading: false,
       isManager: false,
+      botMode: null,
       authError: null,
 
       login: async (initData: string) => {
@@ -38,12 +39,14 @@ export const useAuthStore = create<AuthState>()(
           const response = await api.post('/auth/telegram', null, {
             params: { init_data: initData }
           })
-          const { access_token, role } = response.data
+          const { access_token, role, bot_mode } = response.data
+          const botMode = (bot_mode ?? 'client') as 'client' | 'manager'
 
           set({
             token: access_token,
-            isManager: isClientBot ? false : role !== 'client',
-            isLoading: false
+            isManager: botMode === 'client' ? false : role !== 'client',
+            botMode,
+            isLoading: false,
           })
 
           await get().fetchUser()
@@ -55,20 +58,19 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        set({ token: null, user: null, isManager: false, authError: null })
+        set({ token: null, user: null, isManager: false, botMode: null, authError: null })
       },
 
-      // Bug fix: also set isManager so it's correct after page reload
       fetchUser: async () => {
         try {
           const response = await api.get('/auth/me')
           const userData: User = response.data
+          const { botMode } = get()
           set({
             user: userData,
-            isManager: isClientBot ? false : userData.role !== 'client'
+            isManager: botMode === 'client' ? false : userData.role !== 'client',
           })
         } catch (error: any) {
-          // Token expired or invalid — force logout
           if (error?.response?.status === 401) {
             get().logout()
           }
@@ -78,8 +80,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'vestavto-auth',
-      // Зберігаємо token + isManager щоб після reload не було redirect до /
-      partialize: (state) => ({ token: state.token, isManager: state.isManager })
+      partialize: (state) => ({ token: state.token, isManager: state.isManager, botMode: state.botMode })
     }
   )
 )

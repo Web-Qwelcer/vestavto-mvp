@@ -24,6 +24,7 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     role: UserRole
     user_id: int
+    bot_mode: str = "client"  # "client" | "manager"
 
 
 class UserInfo(BaseModel):

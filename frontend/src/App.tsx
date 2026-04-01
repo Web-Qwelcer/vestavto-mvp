@@ -2,7 +2,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import { useAuthStore } from './store/auth'
-import { isManagerBot } from './botMode'
 import Layout from './components/Layout'
 import Toast from './components/Toast'
 import HomePage from './pages/HomePage'
@@ -15,6 +14,12 @@ import OrderPage from './pages/OrderPage'
 // Manager pages
 import AdminProductsPage from './pages/admin/ProductsPage'
 import AdminOrdersPage from './pages/admin/OrdersPage'
+
+function IndexRoute() {
+  const botMode = useAuthStore((s) => s.botMode)
+  if (botMode === 'manager') return <Navigate to="/admin/products" replace />
+  return <HomePage />
+}
 
 function StartParamHandler() {
   const navigate = useNavigate()
@@ -115,7 +120,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           {/* Client routes */}
-          <Route index element={isManagerBot ? <Navigate to="/admin/products" replace /> : <HomePage />} />
+          <Route index element={<IndexRoute />} />
           <Route path="product/:id" element={<ProductPage />} />
           <Route path="cart" element={<CartPage />} />
           <Route path="checkout" element={<CheckoutPage />} />
