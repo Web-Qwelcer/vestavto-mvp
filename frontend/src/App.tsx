@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import { useAuthStore } from './store/auth'
 import Layout from './components/Layout'
+import Toast from './components/Toast'
 import HomePage from './pages/HomePage'
 import ProductPage from './pages/ProductPage'
 import CartPage from './pages/CartPage'
@@ -109,6 +110,7 @@ function App() {
   return (
     <BrowserRouter>
       <StartParamHandler />
+      <Toast />
       <Routes>
         <Route path="/" element={<Layout />}>
           {/* Client routes */}

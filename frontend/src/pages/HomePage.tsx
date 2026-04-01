@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import api from '../api'
 import { useCartStore } from '../store/cart'
+import { useToastStore } from '../store/toast'
 
 interface Product {
   id: number
@@ -64,6 +65,7 @@ export default function HomePage() {
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   const addItem = useCartStore((s) => s.addItem)
+  const { showToast } = useToastStore()
 
   const { data: products, isLoading, isError } = useQuery({
     queryKey: ['products', category, car],
@@ -291,7 +293,7 @@ export default function HomePage() {
                     </button>
                   ) : (
                     <button
-                      onClick={() =>
+                      onClick={() => {
                         addItem({
                           id: product.id,
                           name: product.name,
@@ -299,7 +301,8 @@ export default function HomePage() {
                           deposit: product.deposit,
                           photo: product.photos?.[0],
                         })
-                      }
+                        showToast('Додано в кошик', 'success')
+                      }}
                       className="p-2 bg-primary text-white rounded-xl flex-shrink-0"
                       title="Додати в кошик"
                     >

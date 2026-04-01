@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api'
 import { useAuthStore } from '../../store/auth'
 import { Navigate } from 'react-router-dom'
+import { useToastStore } from '../../store/toast'
 
 interface ImportResult {
   created: number
@@ -14,6 +15,7 @@ interface ImportResult {
 export default function AdminProductsPage() {
   const { isManager, isLoading: authLoading } = useAuthStore()
   const queryClient = useQueryClient()
+  const { showToast } = useToastStore()
 
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -59,7 +61,7 @@ export default function AdminProductsPage() {
     mutationFn: (id: number) => api.delete(`/products/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-products'] }),
     onError: (err: any) => {
-      alert(err?.response?.data?.detail || 'Помилка видалення товару')
+      showToast(err?.response?.data?.detail || 'Помилка видалення товару', 'error')
     },
   })
 
@@ -77,9 +79,9 @@ export default function AdminProductsPage() {
   // Single-click atomic save: create/update → upload pending photos
   const handleSave = async () => {
     if (isSaving) return
-    if (!form.name) { alert('Введіть назву товару'); return }
+    if (!form.name) { showToast('Введіть назву товару', 'error'); return }
     if (!form.is_negotiable && !(parseFloat(form.price) > 0)) {
-      alert('Введіть ціну більше 0 або позначте "Договірна ціна"')
+      showToast('Введіть ціну більше 0 або позначте "Договірна ціна"', 'error')
       return
     }
     setIsSaving(true)
@@ -99,6 +101,7 @@ export default function AdminProductsPage() {
         await uploadPhotos(productId, pendingPhotos)
       }
       queryClient.invalidateQueries({ queryKey: ['admin-products'] })
+      showToast(editId ? 'Товар збережено' : 'Товар додано', 'success')
       resetForm()
     } catch (err: any) {
       const detail = err?.response?.data?.detail
@@ -109,7 +112,7 @@ export default function AdminProductsPage() {
           : detail
             ? JSON.stringify(detail)
             : 'Помилка збереження'
-      alert(msg)
+      showToast(msg, 'error')
     } finally {
       setIsSaving(false)
     }
@@ -131,7 +134,7 @@ export default function AdminProductsPage() {
       await uploadPhotos(id, files)
       queryClient.invalidateQueries({ queryKey: ['admin-products'] })
     } catch (err: any) {
-      alert(err?.response?.data?.detail || 'Помилка завантаження')
+      showToast(err?.response?.data?.detail || 'Помилка завантаження', 'error')
     } finally {
       setUploadingId(null)
     }
@@ -219,7 +222,7 @@ export default function AdminProductsPage() {
       setImportResult(res.data)
       queryClient.invalidateQueries({ queryKey: ['admin-products'] })
     } catch (err: any) {
-      alert(err?.response?.data?.detail || 'Помилка імпорту')
+      showToast(err?.response?.data?.detail || 'Помилка імпорту', 'error')
     } finally {
       setIsImporting(false)
     }
@@ -634,8 +637,8 @@ export default function AdminProductsPage() {
                     const botUsername = import.meta.env.VITE_BOT_USERNAME || 'vestavto_client_bot'
                     const url = `https://t.me/${botUsername}/shop?startapp=product_${p.id}`
                     navigator.clipboard.writeText(url).then(
-                      () => alert('Посилання скопійовано!'),
-                      () => alert(url)
+                      () => showToast('Посилання скопійовано!', 'success'),
+                      () => showToast('Не вдалося скопіювати', 'error')
                     )
                   }}
                   className="text-gray-400 hover:text-primary text-sm"

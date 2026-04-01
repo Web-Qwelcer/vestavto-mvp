@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../api'
 import { useCartStore } from '../store/cart'
+import { useToastStore } from '../store/toast'
 
 const CATEGORY_LABELS: Record<string, string> = {
   engine: 'Двигун і навісне',
@@ -28,6 +29,7 @@ export default function ProductPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const addItem = useCartStore((s) => s.addItem)
+  const { showToast } = useToastStore()
   const [photoIdx, setPhotoIdx] = useState(0)
   const touchStartX = useRef(0)
 
@@ -65,6 +67,7 @@ export default function ProductPage() {
       deposit: product.deposit,
       photo: photos[0],
     })
+    showToast('Додано в кошик', 'success')
     navigate('/cart')
   }
 

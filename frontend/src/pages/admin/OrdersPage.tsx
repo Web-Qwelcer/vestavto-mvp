@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Navigate } from 'react-router-dom'
 import api from '../../api'
 import { useAuthStore } from '../../store/auth'
+import { useToastStore } from '../../store/toast'
 
 const statuses = [
   'new',
@@ -29,6 +30,7 @@ const statusLabels: Record<string, string> = {
 export default function AdminOrdersPage() {
   const { isManager, isLoading: authLoading } = useAuthStore()
   const queryClient = useQueryClient()
+  const { showToast } = useToastStore()
 
   // ── Edit contact state ──
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -48,17 +50,23 @@ export default function AdminOrdersPage() {
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
       api.patch(`/orders/${id}/status`, { status }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-orders'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] })
+      showToast('Статус оновлено', 'success')
+    },
     onError: (err: any) => {
-      alert(err?.response?.data?.detail || 'Помилка оновлення статусу')
+      showToast(err?.response?.data?.detail || 'Помилка оновлення статусу', 'error')
     },
   })
 
   const createTTN = useMutation({
     mutationFn: (id: number) => api.post(`/delivery/${id}/create-ttn`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-orders'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] })
+      showToast('ТТН створено', 'success')
+    },
     onError: (err: any) => {
-      alert(err?.response?.data?.detail || 'Помилка створення ТТН')
+      showToast(err?.response?.data?.detail || 'Помилка створення ТТН', 'error')
     },
   })
 
@@ -67,10 +75,11 @@ export default function AdminOrdersPage() {
       api.patch(`/orders/${id}/contact`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] })
+      showToast('Контакт збережено', 'success')
       setEditingId(null)
     },
     onError: (err: any) => {
-      alert(err?.response?.data?.detail || 'Помилка збереження')
+      showToast(err?.response?.data?.detail || 'Помилка збереження', 'error')
     },
   })
 
@@ -88,7 +97,7 @@ export default function AdminOrdersPage() {
   const saveEdit = (id: number) => {
     const name = editForm.recipient_name.trim()
     const phone = editForm.recipient_phone.trim()
-    if (!name || !phone) return alert('Заповніть всі поля')
+    if (!name || !phone) { showToast('Заповніть всі поля', 'error'); return }
     updateContact.mutate({ id, data: { recipient_name: name, recipient_phone: phone } })
   }
 
