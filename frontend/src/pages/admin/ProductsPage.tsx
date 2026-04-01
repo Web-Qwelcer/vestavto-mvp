@@ -27,6 +27,7 @@ export default function AdminProductsPage() {
   const [showSearch, setShowSearch] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
+  const [activeTab, setActiveTab] = useState<'available' | 'reserved' | 'sold'>('available')
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const addPhotoInputRef = useRef<HTMLInputElement>(null)
@@ -228,29 +229,46 @@ export default function AdminProductsPage() {
     }
   }
 
-  // Admin search: filter by ID, name, description
-  const filteredProducts = useMemo(() => {
+  // Tab filtering
+  const tabProducts = useMemo(() => {
     if (!products) return []
+    if (activeTab === 'available') return (products as any[]).filter((p: any) => p.is_available && !p.is_reserved)
+    if (activeTab === 'reserved') return (products as any[]).filter((p: any) => p.is_available && p.is_reserved)
+    return (products as any[]).filter((p: any) => !p.is_available)
+  }, [products, activeTab])
+
+  // Badge counts per tab (from all products, not search-filtered)
+  const tabCounts = useMemo(() => {
+    if (!products) return { available: 0, reserved: 0, sold: 0 }
+    return {
+      available: (products as any[]).filter((p: any) => p.is_available && !p.is_reserved).length,
+      reserved: (products as any[]).filter((p: any) => p.is_available && p.is_reserved).length,
+      sold: (products as any[]).filter((p: any) => !p.is_available).length,
+    }
+  }, [products])
+
+  // Search within the active tab
+  const filteredProducts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
-    if (!q) return products
-    return products.filter((p: any) =>
+    if (!q) return tabProducts
+    return tabProducts.filter((p: any) =>
       String(p.id) === q.replace('#', '') ||
       p.name?.toLowerCase().includes(q) ||
       (p.description ?? '').toLowerCase().includes(q)
     )
-  }, [products, searchQuery])
+  }, [tabProducts, searchQuery])
 
   const suggestions = useMemo(() => {
-    if (!products || !searchQuery.trim()) return []
+    if (!searchQuery.trim()) return []
     const q = searchQuery.trim().toLowerCase()
-    return (products as any[])
+    return tabProducts
       .filter((p: any) =>
         String(p.id) === q.replace('#', '') ||
         p.name?.toLowerCase().includes(q) ||
         (p.description ?? '').toLowerCase().includes(q)
       )
       .slice(0, 5)
-  }, [products, searchQuery])
+  }, [tabProducts, searchQuery])
 
   const openSearch = () => {
     setShowSearch(true)
@@ -270,31 +288,59 @@ export default function AdminProductsPage() {
   return (
     <div className="p-4 text-ink">
       <h1 className="text-xl font-bold text-ink mb-3">Товари</h1>
+      {/* Row 1: actions */}
+      <div className="flex items-center gap-2 mb-2">
+        <button
+          onClick={handleExport}
+          title="Експорт в Excel"
+          className="flex-1 h-9 border border-gray-300 rounded-lg text-xs text-ink bg-white hover:bg-gray-50"
+        >
+          📥 Експорт
+        </button>
+        <button
+          onClick={() => importFileRef.current?.click()}
+          disabled={isImporting}
+          title="Імпорт з Excel"
+          className="flex-1 h-9 border border-gray-300 rounded-lg text-xs text-ink bg-white hover:bg-gray-50 disabled:opacity-50"
+        >
+          {isImporting ? '...' : '📤 Імпорт'}
+        </button>
+        <input ref={importFileRef} type="file" accept=".xlsx" className="hidden" onChange={handleImportFile} />
+        <button
+          onClick={() => { resetForm(); setShowForm(true) }}
+          className="flex-1 h-9 rounded-lg text-xs font-medium bg-primary text-white hover:bg-blue-700"
+        >
+          + Додати
+        </button>
+      </div>
+
+      {/* Row 2: tabs + search */}
       <div className="flex items-center gap-2 mb-4">
         {!showSearch ? (
           <>
-            <button
-              onClick={handleExport}
-              title="Експорт в Excel"
-              className="flex-1 h-9 border border-gray-300 rounded-lg text-xs text-ink bg-white hover:bg-gray-50"
-            >
-              📥 Експорт
-            </button>
-            <button
-              onClick={() => importFileRef.current?.click()}
-              disabled={isImporting}
-              title="Імпорт з Excel"
-              className="flex-1 h-9 border border-gray-300 rounded-lg text-xs text-ink bg-white hover:bg-gray-50 disabled:opacity-50"
-            >
-              {isImporting ? '...' : '📤 Імпорт'}
-            </button>
-            <input ref={importFileRef} type="file" accept=".xlsx" className="hidden" onChange={handleImportFile} />
-            <button
-              onClick={() => { resetForm(); setShowForm(true) }}
-              className="flex-1 h-9 rounded-lg text-xs font-medium bg-primary text-white hover:bg-blue-700"
-            >
-              + Додати
-            </button>
+            {(['available', 'reserved', 'sold'] as const).map((tab) => {
+              const labels = { available: 'В наявності', reserved: 'Заброньовані', sold: 'Продані' }
+              const count = tabCounts[tab]
+              const isActive = activeTab === tab
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex-1 h-9 rounded-lg text-xs font-medium flex items-center justify-center gap-1 ${
+                    isActive ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {labels[tab]}
+                  {count > 0 && (
+                    <span className={`text-xs rounded-full px-1.5 py-0.5 leading-none ${
+                      isActive ? 'bg-white/25 text-white' : 'bg-gray-300 text-gray-700'
+                    }`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
             <button
               onClick={openSearch}
               className="ml-auto w-9 h-9 flex items-center justify-center border border-gray-300 rounded-lg bg-white text-gray-500 hover:text-primary flex-shrink-0"
