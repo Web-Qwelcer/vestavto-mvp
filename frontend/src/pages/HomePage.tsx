@@ -67,29 +67,35 @@ export default function HomePage() {
   const addItem = useCartStore((s) => s.addItem)
   const { showToast } = useToastStore()
 
+  // Always fetch all available products — filtering done client-side
+  // so search can find across all categories/cars regardless of active filters
   const { data: products, isLoading, isError } = useQuery({
-    queryKey: ['products', category, car],
+    queryKey: ['products'],
     queryFn: async () => {
-      const res = await api.get('/products', {
-        params: { category: category || undefined, car_model: car || undefined },
-      })
+      const res = await api.get('/products')
       return res.data as Product[]
     },
   })
 
-  // Grid: filter by search query
+  // Grid: when searching — ignore category/car filters; otherwise apply them
   const filteredProducts = useMemo(() => {
     if (!products) return []
     const q = searchQuery.trim().toLowerCase()
-    if (!q) return products
+    if (q) {
+      return products.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.description ?? '').toLowerCase().includes(q)
+      )
+    }
     return products.filter(
       (p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.description ?? '').toLowerCase().includes(q)
+        (!category || p.category === category) &&
+        (!car || p.car_model === car)
     )
-  }, [products, searchQuery])
+  }, [products, searchQuery, category, car])
 
-  // Autocomplete: top-5 by name match
+  // Autocomplete: top-5 across ALL products (ignores filters)
   const suggestions = useMemo(() => {
     if (!products || !searchQuery.trim()) return []
     const q = searchQuery.trim().toLowerCase()

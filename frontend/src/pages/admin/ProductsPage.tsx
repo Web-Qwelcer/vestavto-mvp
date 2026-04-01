@@ -247,28 +247,28 @@ export default function AdminProductsPage() {
     }
   }, [products])
 
-  // Search within the active tab
+  // Search across ALL products (ignores active tab); empty query → use tab filter
   const filteredProducts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     if (!q) return tabProducts
-    return tabProducts.filter((p: any) =>
+    return (products as any[] ?? []).filter((p: any) =>
       String(p.id) === q.replace('#', '') ||
       p.name?.toLowerCase().includes(q) ||
       (p.description ?? '').toLowerCase().includes(q)
     )
-  }, [tabProducts, searchQuery])
+  }, [products, tabProducts, searchQuery])
 
   const suggestions = useMemo(() => {
     if (!searchQuery.trim()) return []
     const q = searchQuery.trim().toLowerCase()
-    return tabProducts
+    return (products as any[] ?? [])
       .filter((p: any) =>
         String(p.id) === q.replace('#', '') ||
         p.name?.toLowerCase().includes(q) ||
         (p.description ?? '').toLowerCase().includes(q)
       )
       .slice(0, 5)
-  }, [tabProducts, searchQuery])
+  }, [products, searchQuery])
 
   const openSearch = () => {
     setShowSearch(true)
