@@ -77,32 +77,17 @@ export default function HomePage() {
     },
   })
 
-  // Numeric query → exact ID match only; text → name/description, sorted by relevance
-  const searchProducts = (list: Product[], query: string) => {
-    const q = query.trim().toLowerCase()
-    if (!q) return null
-    const rawQ = q.replace('#', '')
-    const isNumeric = /^\d+$/.test(rawQ)
-    if (isNumeric) {
-      return list.filter((p) => String(p.id) === rawQ)
-    }
-    return list
-      .map((p) => {
-        const nameMatch = p.name.toLowerCase().includes(q)
-        const descMatch = (p.description ?? '').toLowerCase().includes(q)
-        if (!nameMatch && !descMatch) return null
-        return { p, score: nameMatch ? 0 : 1 }
-      })
-      .filter(Boolean)
-      .sort((a, b) => a!.score - b!.score)
-      .map((x) => x!.p)
-  }
-
   // Grid: when searching — ignore category/car filters; otherwise apply them
   const filteredProducts = useMemo(() => {
     if (!products) return []
-    const result = searchProducts(products, searchQuery)
-    if (result !== null) return result
+    const q = searchQuery.trim().toLowerCase()
+    if (q) {
+      return products.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.description ?? '').toLowerCase().includes(q)
+      )
+    }
     return products.filter(
       (p) =>
         (!category || p.category === category) &&
@@ -110,11 +95,13 @@ export default function HomePage() {
     )
   }, [products, searchQuery, category, car])
 
-  // Autocomplete: top-5 across ALL products (ignores filters)
+  // Autocomplete: top-5 name matches across ALL products (ignores filters)
   const suggestions = useMemo(() => {
     if (!products || !searchQuery.trim()) return []
-    const result = searchProducts(products, searchQuery)
-    return (result ?? []).slice(0, 5)
+    const q = searchQuery.trim().toLowerCase()
+    return products
+      .filter((p) => p.name.toLowerCase().includes(q))
+      .slice(0, 5)
   }, [products, searchQuery])
 
   const handleAskAbout = (id: number, name: string) => () => {
