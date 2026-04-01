@@ -2,9 +2,41 @@
 VestAvto MVP - Monobank Service
 """
 import os
+import base64
+import logging
 import httpx
 from typing import Optional
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+# ── Monobank public key cache ──────────────────────────────────────────────────
+_pubkey_cache: Optional[object] = None   # cryptography EllipticCurvePublicKey
+
+
+async def _get_monobank_pubkey():
+    """Fetch and cache Monobank ECDSA public key (DER, base64-encoded)."""
+    global _pubkey_cache
+    if _pubkey_cache is not None:
+        return _pubkey_cache
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://api.monobank.ua/api/merchant/pubkey",
+                headers={"X-Token": MONOBANK_TOKEN},
+            )
+            resp.raise_for_status()
+            key_b64: str = resp.json().get("key", "")
+
+        from cryptography.hazmat.primitives.serialization import load_der_public_key
+        der = base64.b64decode(key_b64)
+        _pubkey_cache = load_der_public_key(der)
+        logger.info("Monobank public key loaded and cached")
+        return _pubkey_cache
+    except Exception as exc:
+        logger.error(f"Failed to fetch Monobank public key: {exc}")
+        return None
 
 MONOBANK_API_URL = "https://api.monobank.ua"
 MONOBANK_TOKEN = os.getenv("MONOBANK_API_TOKEN", "")
@@ -117,11 +149,34 @@ async def get_statement(
             return []
 
 
-def verify_webhook_signature(body: bytes, signature: str) -> bool:
+async def verify_webhook_signature(body: bytes, signature: str) -> bool:
     """
-    Перевірка підпису webhook від Monobank.
-    TODO: Реалізувати перевірку ECDSA підпису
+    Verify Monobank webhook ECDSA signature.
+
+    Monobank signs the raw request body with its private key (ECDSA, SHA-256).
+    The X-Sign header contains the base64-encoded DER signature.
+    We verify it against the cached public key fetched from Monobank API.
+
+    Returns True if signature is valid, False otherwise.
+    If the public key cannot be fetched (network error) — returns True to avoid
+    blocking legitimate webhooks during an outage, but logs a warning.
     """
-    # Monobank використовує ECDSA підпис
-    # Для MVP можна пропустити, але для production — обов'язково
-    return True
+    if not signature:
+        logger.warning("Monobank webhook: missing X-Sign header")
+        return False
+
+    pubkey = await _get_monobank_pubkey()
+    if pubkey is None:
+        # Key fetch failed — fail open with a warning rather than drop all payments
+        logger.warning("Monobank webhook: could not fetch public key, skipping signature check")
+        return True
+
+    try:
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
+        sig_bytes = base64.b64decode(signature)
+        pubkey.verify(sig_bytes, body, ECDSA(hashes.SHA256()))   # type: ignore[arg-type]
+        return True
+    except Exception as exc:
+        logger.warning(f"Monobank webhook: invalid signature — {exc}")
+        return False

@@ -77,11 +77,14 @@ async def monobank_webhook(
     Викликається автоматично після оплати.
     """
     body = await request.body()
-    # TODO: Verify signature
-    # signature = request.headers.get("X-Sign", "")
-    # if not monobank.verify_webhook_signature(body, signature):
-    #     raise HTTPException(status_code=400, detail="Invalid signature")
-    
+    signature = request.headers.get("X-Sign", "")
+    if not await monobank.verify_webhook_signature(body, signature):
+        logger.warning(
+            f"Monobank webhook: rejected invalid signature "
+            f"(ip={request.client.host if request.client else 'unknown'})"
+        )
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
     data = await request.json()
     invoice_id = data.get("invoiceId")
     status = data.get("status")
