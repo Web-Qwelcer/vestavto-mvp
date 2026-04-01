@@ -319,25 +319,21 @@ export default function AdminProductsPage() {
         {!showSearch ? (
           <>
             {(['available', 'reserved', 'sold'] as const).map((tab) => {
-              const labels = { available: 'В наявності', reserved: 'Заброньовані', sold: 'Продані' }
+              const icons = { available: '✓', reserved: '🔒', sold: '✕' }
+              const titles = { available: 'В наявності', reserved: 'Заброньовані', sold: 'Продані' }
               const count = tabCounts[tab]
               const isActive = activeTab === tab
               return (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`flex-1 h-9 rounded-lg text-xs font-medium flex items-center justify-center gap-1 ${
+                  title={titles[tab]}
+                  className={`flex-1 h-9 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 ${
                     isActive ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  {labels[tab]}
-                  {count > 0 && (
-                    <span className={`text-xs rounded-full px-1.5 py-0.5 leading-none ${
-                      isActive ? 'bg-white/25 text-white' : 'bg-gray-300 text-gray-700'
-                    }`}>
-                      {count}
-                    </span>
-                  )}
+                  <span className="leading-none">{icons[tab]}</span>
+                  <span className="text-xs">{count}</span>
                 </button>
               )
             })}
