@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import api from '../api'
+import { isClientBot } from '../botMode'
 
 interface User {
   id: number
@@ -41,7 +42,7 @@ export const useAuthStore = create<AuthState>()(
 
           set({
             token: access_token,
-            isManager: role !== 'client',
+            isManager: isClientBot ? false : role !== 'client',
             isLoading: false
           })
 
@@ -64,7 +65,7 @@ export const useAuthStore = create<AuthState>()(
           const userData: User = response.data
           set({
             user: userData,
-            isManager: userData.role !== 'client'
+            isManager: isClientBot ? false : userData.role !== 'client'
           })
         } catch (error: any) {
           // Token expired or invalid — force logout

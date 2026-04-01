@@ -4,6 +4,7 @@ import api from '../../api'
 import { useAuthStore } from '../../store/auth'
 import { Navigate } from 'react-router-dom'
 import { useToastStore } from '../../store/toast'
+import { isManagerBot } from '../../botMode'
 
 interface ImportResult {
   created: number
@@ -293,7 +294,18 @@ export default function AdminProductsPage() {
 
   // Conditional returns after hooks
   if (authLoading) return <div className="p-4 text-center text-ink">Завантаження...</div>
-  if (!isManager) return <Navigate to="/" />
+  if (!isManager) {
+    if (isManagerBot) return (
+      <div className="min-h-screen flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="text-5xl mb-4">🚫</div>
+          <p className="text-lg font-semibold text-ink mb-1">Доступ заборонено</p>
+          <p className="text-sm text-gray-500">Цей бот тільки для менеджерів</p>
+        </div>
+      </div>
+    )
+    return <Navigate to="/" />
+  }
 
   return (
     <div className="p-4 text-ink">

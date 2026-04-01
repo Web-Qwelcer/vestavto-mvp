@@ -1,7 +1,8 @@
 // Vercel deploy trigger
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import { useAuthStore } from './store/auth'
+import { isManagerBot } from './botMode'
 import Layout from './components/Layout'
 import Toast from './components/Toast'
 import HomePage from './pages/HomePage'
@@ -114,7 +115,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           {/* Client routes */}
-          <Route index element={<HomePage />} />
+          <Route index element={isManagerBot ? <Navigate to="/admin/products" replace /> : <HomePage />} />
           <Route path="product/:id" element={<ProductPage />} />
           <Route path="cart" element={<CartPage />} />
           <Route path="checkout" element={<CheckoutPage />} />
