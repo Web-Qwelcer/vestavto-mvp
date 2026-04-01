@@ -36,6 +36,31 @@ Telegram Mini App — магазин б/у автозапчастин для Sko
 - Excel імпорт/експорт товарів
 - Копіювання deep link товару
 - Inline пошук по ID та назві
+- Аналітика: таблиця джерел трафіку (source | клієнтів | замовлень)
+
+## Трекінг і deep links
+
+### start_param → source
+
+Кожен перехід до Mini App може містити `?startapp=` параметр:
+
+```
+t.me/vestavto_client_bot/shop?startapp=product_25      → source: "product_deeplink"
+t.me/vestavto_client_bot/shop?startapp=src_tgchannel   → source: "tgchannel"
+t.me/vestavto_client_bot/shop                          → source: "direct"
+```
+
+Парсинг відбувається при mount з `window.Telegram.WebApp.initDataUnsafe.start_param`.
+При авторизації нового клієнта — source зберігається в БД.
+При створенні замовлення — source копіюється з клієнта в order.
+
+### Кампанійні посилання
+
+Формат для рекламних посилань:
+```
+t.me/vestavto_client_bot/shop?startapp=src_НАЗВА_КАМПАНІЇ
+```
+Префікс `src_` автоматично прибирається — в БД зберігається тільки `НАЗВА_КАМПАНІЇ`.
 
 ## Запуск локально
 

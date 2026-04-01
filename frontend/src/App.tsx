@@ -14,6 +14,17 @@ import OrderPage from './pages/OrderPage'
 // Manager pages
 import AdminProductsPage from './pages/admin/ProductsPage'
 import AdminOrdersPage from './pages/admin/OrdersPage'
+import AdminAnalyticsPage from './pages/admin/AnalyticsPage'
+
+// "product_25"      → "product_deeplink"
+// "src_facebook_may" → "facebook_may"
+// "" / undefined    → "direct"
+function parseSource(startParam: string): string {
+  if (!startParam) return 'direct'
+  if (startParam.startsWith('product_')) return 'product_deeplink'
+  if (startParam.startsWith('src_')) return startParam.slice(4)
+  return startParam
+}
 
 function IndexRoute() {
   const botMode = useAuthStore((s) => s.botMode)
@@ -89,14 +100,14 @@ function App() {
       tg.expand()
 
       if (tg.initData) {
-        // Fresh Telegram session — authenticate
-        login(tg.initData)
+        // Parse start_param into a traffic source
+        const startParam = tg.initDataUnsafe?.start_param ?? ''
+        const source = parseSource(startParam)
+        login(tg.initData, source)
       } else if (token) {
-        // App reloaded without new initData — restore user from saved token
         fetchUser()
       }
     } else if (token) {
-      // Outside Telegram (browser/dev) — restore user state from saved token
       fetchUser()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -130,6 +141,7 @@ function App() {
           {/* Manager routes */}
           <Route path="admin/products" element={<AdminProductsPage />} />
           <Route path="admin/orders" element={<AdminOrdersPage />} />
+          <Route path="admin/analytics" element={<AdminAnalyticsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

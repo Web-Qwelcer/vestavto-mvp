@@ -1,6 +1,7 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useCartStore } from '../store/cart'
 import { useAuthStore } from '../store/auth'
+import { getBotMode } from '../botMode'
 
 // ── Tab definitions ──────────────────────────────────────────────────────────
 
@@ -39,11 +40,17 @@ export default function Layout() {
     { path: '/cart',    label: 'Кошик',      icon: '🛒', badge: itemsCount },
   ]
 
-  const managerTabs: Tab[] = [
-    { path: '/admin/products', label: 'Товари',    icon: '📦' },
-    { path: '/admin/orders',   label: 'Замовлення', icon: '📋' },
-    { path: '/',               label: 'Магазин',   icon: '👁', exact: true },
-  ]
+  const managerTabs: Tab[] = getBotMode() === 'manager'
+    ? [
+        { path: '/admin/products',  label: 'Товари',     icon: '📦' },
+        { path: '/admin/orders',    label: 'Замовлення', icon: '📋' },
+        { path: '/admin/analytics', label: 'Аналітика',  icon: '📊' },
+      ]
+    : [
+        { path: '/admin/products', label: 'Товари',    icon: '📦' },
+        { path: '/admin/orders',   label: 'Замовлення', icon: '📋' },
+        { path: '/',               label: 'Магазин',   icon: '👁', exact: true },
+      ]
 
   const tabs = isManager ? managerTabs : clientTabs
   const showBack = isDetailPath(location.pathname)

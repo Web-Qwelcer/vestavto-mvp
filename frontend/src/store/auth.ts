@@ -18,7 +18,7 @@ interface AuthState {
   isManager: boolean
   botMode: 'client' | 'manager' | null
   authError: string | null
-  login: (initData: string) => Promise<void>
+  login: (initData: string, source?: string) => Promise<void>
   logout: () => void
   fetchUser: () => Promise<void>
 }
@@ -33,12 +33,12 @@ export const useAuthStore = create<AuthState>()(
       botMode: null,
       authError: null,
 
-      login: async (initData: string) => {
+      login: async (initData: string, source?: string) => {
         set({ isLoading: true, authError: null })
         try {
-          const response = await api.post('/auth/telegram', null, {
-            params: { init_data: initData }
-          })
+          const params: Record<string, string> = { init_data: initData }
+          if (source) params.source = source
+          const response = await api.post('/auth/telegram', null, { params })
           const { access_token, role, bot_mode } = response.data
           const botMode = (bot_mode ?? 'client') as 'client' | 'manager'
 

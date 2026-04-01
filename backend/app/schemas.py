@@ -244,3 +244,15 @@ class DashboardStats(BaseModel):
     paid_orders: int
     total_revenue: float
     today_orders: int
+
+
+# === Analytics ===
+
+class SourceStat(BaseModel):
+    source: str
+    clients: int
+    orders: int
+
+
+class SourcesResponse(BaseModel):
+    sources: List[SourceStat]

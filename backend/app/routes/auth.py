@@ -2,6 +2,7 @@
 VestAvto MVP - Auth Routes
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 @router.post("/telegram", response_model=TokenResponse)
 async def auth_telegram(
     init_data: str,
+    source: Optional[str] = None,
     session: AsyncSession = Depends(get_session)
 ):
     """
@@ -48,10 +50,15 @@ async def auth_telegram(
             client = Client(
                 telegram_id=tg_user.id,
                 username=tg_user.username,
-                full_name=full_name
+                full_name=full_name,
+                source=source or "direct",
             )
             session.add(client)
             await session.flush()
+        else:
+            # Update source only if not yet set
+            if client.source is None and source:
+                client.source = source
         if client.is_blocked:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is blocked")
         token = create_access_token(client.id, client.telegram_id, UserRole.CLIENT)

@@ -88,6 +88,7 @@ class Client(Base):
     full_name: Mapped[str] = mapped_column(String(200))
     phone: Mapped[Optional[str]] = mapped_column(String(20))
     is_blocked: Mapped[bool] = mapped_column(default=False)
+    source: Mapped[Optional[str]] = mapped_column(String(200))  # Traffic source from start_param
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
     
     # Nova Poshta
@@ -162,6 +163,9 @@ class Order(Base):
     ttn_ref: Mapped[Optional[str]] = mapped_column(String(100))
     ttn_status: Mapped[Optional[str]] = mapped_column(String(100))
     
+    # Traffic source (copied from client at order creation)
+    source: Mapped[Optional[str]] = mapped_column(String(200))
+
     # Monobank
     monobank_invoice_id: Mapped[Optional[str]] = mapped_column(String(100))
     

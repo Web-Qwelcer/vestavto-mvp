@@ -39,6 +39,8 @@ async def init_db():
     migrations = [
         "ALTER TABLE products ADD COLUMN is_negotiable BOOLEAN DEFAULT FALSE",
         "ALTER TABLE products ADD COLUMN is_reserved BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE clients ADD COLUMN source VARCHAR(200)",
+        "ALTER TABLE orders ADD COLUMN source VARCHAR(200)",
     ]
     for sql in migrations:
         try:

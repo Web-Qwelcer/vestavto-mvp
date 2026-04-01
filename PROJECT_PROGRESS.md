@@ -140,6 +140,30 @@ vestavto-mvp/
 ### SQLAdmin
 - `/admin` — CRUD для Manager, Client, Product, Order, Payment
 
+### Розподіл інтерфейсів (клієнт / менеджер)
+- `validate_init_data` повертає `(TelegramUser, bot_mode)` — визначає по HMAC якому боту належить initData
+- Клієнтський бот: завжди `role=client`, незалежно від таблиці managers
+- Менеджерський бот: перевіряє таблицю managers, повертає 403 для чужих
+- `bot_mode` повертається в `TokenResponse`, зберігається в Zustand (persisted)
+- Фронтенд: `IndexRoute` редіректить на `/admin/products` якщо `botMode=manager`
+- Менеджерська навігація: 📦 Товари | 📋 Замовлення | 📊 Аналітика (без "Магазин" для manager bot)
+
+### Трекінг джерел трафіку (source)
+- `clients.source` і `orders.source` — VARCHAR(200) NULL
+- Парсинг `start_param` на фронтенді при mount:
+  - `product_25` → `product_deeplink`
+  - `src_facebook_may` → `facebook_may`
+  - порожній → `direct`
+- При авторизації нового клієнта — зберігається source
+- При існуючому клієнті — оновлюється якщо було NULL (перший deep link)
+- При створенні замовлення — source копіюється з клієнта в order
+- `GET /api/admin/analytics/sources` — агрегована таблиця: source | clients | orders
+
+### Аналітика (адмін-панель)
+- Нова сторінка `/admin/analytics` — `AdminAnalyticsPage.tsx`
+- Таблиця: Джерело | Клієнтів | Замовлень + рядок "Всього"
+- Сортування по клієнтах (desc) на бекенді
+
 ---
 
 ## TODO перед production
@@ -157,7 +181,13 @@ vestavto-mvp/
 - Автоматичне оновлення статусу доставки (polling або NP webhook)
 - Об'єднання ТТН для кількох замовлень одного клієнта
 - Видалення старих фото з Cloudinary при редагуванні товару
-- Статистика/дашборд для менеджера
+
+### Розширена аналітика (пост-MVP)
+- Таблиця `analytics_events`: events-based воронка (session_start → product_view → order_created → payment_completed)
+- Конверсія між кроками воронки
+- Графіки по днях (сесії, замовлення, revenue)
+- Per-product аналітика (перегляди, конверсія)
+- `analytics_sessions` для точної атрибуції по сесіях
 
 ---
 

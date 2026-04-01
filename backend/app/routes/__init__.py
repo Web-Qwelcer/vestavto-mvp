@@ -1,6 +1,6 @@
 """Routes package"""
 from fastapi import APIRouter
-from app.routes import auth, products, orders, payments, delivery
+from app.routes import auth, products, orders, payments, delivery, analytics
 
 router = APIRouter()
 
@@ -9,3 +9,4 @@ router.include_router(products.router)
 router.include_router(orders.router)
 router.include_router(payments.router)
 router.include_router(delivery.router)
+router.include_router(analytics.router)
