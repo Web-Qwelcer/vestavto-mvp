@@ -81,7 +81,7 @@ declare global {
 }
 
 function App() {
-  const { login, fetchUser, token, authError } = useAuthStore()
+  const { login, fetchUser, token, authError, isInitializing, setInitialized } = useAuthStore()
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp
@@ -91,17 +91,35 @@ function App() {
       tg.expand()
 
       if (tg.initData) {
-        // Parse start_param into a traffic source
+        // Fresh Telegram session — stale cache is reset inside login()
         const startParam = tg.initDataUnsafe?.start_param ?? ''
         const source = parseSource(startParam)
         login(tg.initData, source)
       } else if (token) {
+        // Page reload without new initData — restore from saved token
         fetchUser()
+      } else {
+        // No auth possible
+        setInitialized()
       }
     } else if (token) {
+      // Outside Telegram (browser/dev)
       fetchUser()
+    } else {
+      setInitialized()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm text-gray-400">Завантаження...</span>
+        </div>
+      </div>
+    )
+  }
 
   if (authError) {
     return (
